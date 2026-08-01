@@ -1,5 +1,5 @@
 {
-  "originHash" : "5247d02bab8fe6f44977cee173c0a63d77a2d93347d6dfaa2f5199b6e41e2593",
+  "originHash" : "619526b786690c14f4dabe14e1e6864ed5e100e8db0d20553acf85f0ef10c255",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -267,8 +267,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/huggingface/swift-jinja.git",
       "state" : {
-        "revision" : "0b67ecb79139f6addef8699eff3622808aa6c7dc",
-        "version" : "2.3.6"
+        "revision" : "7d0b8880ef8e567dd4e0089f8b99fb354129017c",
+        "version" : "2.4.2"
       }
     },
     {
@@ -420,8 +420,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/jamesrochabrun/SwiftOpenAI",
       "state" : {
-        "revision" : "bc6b84767c3a4eb9d48942b86e2417a229ef096c",
-        "version" : "4.4.9"
+        "revision" : "4edec2bba872d149abdb1091a8873b4c70d3b991",
+        "version" : "4.5.0"
       }
     },
     {
