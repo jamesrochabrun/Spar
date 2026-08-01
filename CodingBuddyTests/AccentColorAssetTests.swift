@@ -1,6 +1,6 @@
 //
 //  AccentColorAssetTests.swift
-//  EaselTests
+//  CodingBuddyTests
 //
 
 import CodingBuddyKit

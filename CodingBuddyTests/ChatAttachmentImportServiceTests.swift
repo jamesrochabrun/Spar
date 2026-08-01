@@ -1,6 +1,6 @@
 //
 //  ChatAttachmentImportServiceTests.swift
-//  EaselTests
+//  CodingBuddyTests
 //
 
 import ClaudeCodeCore

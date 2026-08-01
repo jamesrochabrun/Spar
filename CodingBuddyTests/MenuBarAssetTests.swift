@@ -1,18 +1,18 @@
 //
-//  EaselMenuBarAssetTests.swift
-//  EaselTests
+//  MenuBarAssetTests.swift
+//  CodingBuddyTests
 //
 
 import AppKit
 import Foundation
 import Testing
 
-struct EaselMenuBarAssetTests {
+struct MenuBarAssetTests {
 
   @Test
   func menuBarAssetUsesTemplatePNGRepresentations() throws {
     let assetURL = repoRoot
-      .appendingPathComponent("Easel/Assets.xcassets/easelmenubar.imageset")
+      .appendingPathComponent("CodingBuddy/Assets.xcassets/easelmenubar.imageset")
     let contentsURL = assetURL.appendingPathComponent("Contents.json")
     let contents = try JSONDecoder().decode(
       MenuBarAssetContents.self,

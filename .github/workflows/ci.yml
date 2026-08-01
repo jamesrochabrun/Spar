@@ -24,8 +24,8 @@ jobs:
       - name: Build app
         run: |
           xcodebuild \
-            -project Easel.xcodeproj \
-            -scheme Easel \
+            -project CodingBuddy.xcodeproj \
+            -scheme CodingBuddy \
             -configuration Debug \
             -destination 'platform=macOS' \
             -skipPackagePluginValidation \
@@ -36,8 +36,8 @@ jobs:
       - name: Build app tests
         run: |
           xcodebuild \
-            -project Easel.xcodeproj \
-            -scheme Easel \
+            -project CodingBuddy.xcodeproj \
+            -scheme CodingBuddy \
             -configuration Debug \
             -destination 'generic/platform=macOS' \
             -skipPackagePluginValidation \
@@ -45,12 +45,20 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build-for-testing
 
-      - name: Test EaselChat package
-        working-directory: Packages/EaselChat
+      - name: Test CodingBuddyChat package
+        working-directory: Packages/CodingBuddyChat
         run: |
           xcodebuild \
-            -scheme EaselChat-Package \
+            -scheme CodingBuddyChat \
             -destination 'platform=macOS' \
             -skipPackagePluginValidation \
             -skipMacroValidation \
             test
+
+      - name: Test InterviewKit package
+        working-directory: Packages/InterviewKit
+        run: swift test
+
+      - name: Test BuddyMCPUI package
+        working-directory: Packages/BuddyMCPUI
+        run: swift test

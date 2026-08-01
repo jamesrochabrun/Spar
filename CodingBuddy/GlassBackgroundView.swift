@@ -1,6 +1,6 @@
 //
 //  GlassBackgroundView.swift
-//  Easel
+//  CodingBuddy
 //
 
 import AppKit

@@ -1,6 +1,6 @@
 //
 //  CanvasPanelLayoutStateTests.swift
-//  EaselTests
+//  CodingBuddyTests
 //
 
 import Testing

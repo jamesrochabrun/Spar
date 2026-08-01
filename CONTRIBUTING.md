@@ -5,8 +5,8 @@
 1. Install macOS 26.2 or newer and Xcode 26.4 or newer.
 2. Install and authenticate the Claude Code CLI.
 3. Clone the repository.
-4. Open `Easel.xcodeproj`.
-5. Build the shared `Easel` scheme.
+4. Open `CodingBuddy.xcodeproj`.
+5. Build the shared `CodingBuddy` scheme.
 
 ## Tests
 
@@ -14,8 +14,8 @@ Build and test the app scheme:
 
 ```sh
 xcodebuild \
-  -project Easel.xcodeproj \
-  -scheme Easel \
+  -project CodingBuddy.xcodeproj \
+  -scheme CodingBuddy \
   -destination 'platform=macOS' \
   -skipPackagePluginValidation \
   test
@@ -24,9 +24,9 @@ xcodebuild \
 Run package tests through Xcode, not plain `swift test`:
 
 ```sh
-cd Packages/EaselChat
+cd Packages/CodingBuddyChat
 xcodebuild \
-  -scheme EaselChat-Package \
+  -scheme CodingBuddyChat \
   -destination 'platform=macOS' \
   -skipPackagePluginValidation \
   test

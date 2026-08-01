@@ -1,13 +1,13 @@
 //
-//  EaselUITests.swift
-//  EaselUITests
+//  CodingBuddyUITests.swift
+//  CodingBuddyUITests
 //
 //  Created by James Rochabrun on 3/22/26.
 //
 
 import XCTest
 
-final class EaselUITests: XCTestCase {
+final class CodingBuddyUITests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.

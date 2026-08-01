@@ -1,13 +1,13 @@
 //
-//  EaselUITestsLaunchTests.swift
-//  EaselUITests
+//  CodingBuddyUITestsLaunchTests.swift
+//  CodingBuddyUITests
 //
 //  Created by James Rochabrun on 3/22/26.
 //
 
 import XCTest
 
-final class EaselUITestsLaunchTests: XCTestCase {
+final class CodingBuddyUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

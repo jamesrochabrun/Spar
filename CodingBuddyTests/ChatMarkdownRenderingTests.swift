@@ -1,6 +1,6 @@
 //
 //  ChatMarkdownRenderingTests.swift
-//  EaselTests
+//  CodingBuddyTests
 //
 
 import HighlightSwift

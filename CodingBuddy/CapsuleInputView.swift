@@ -1,6 +1,6 @@
 //
 //  CapsuleInputView.swift
-//  Easel
+//  CodingBuddy
 //
 
 import CodingBuddyKit

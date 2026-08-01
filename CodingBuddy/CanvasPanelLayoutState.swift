@@ -1,6 +1,6 @@
 //
 //  CanvasPanelLayoutState.swift
-//  Easel
+//  CodingBuddy
 //
 
 enum CanvasPanelLayoutState: Equatable {

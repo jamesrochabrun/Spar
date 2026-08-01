@@ -1,6 +1,6 @@
 //
 //  SparkleSoftwareUpdater.swift
-//  Easel
+//  CodingBuddy
 //
 
 import Sparkle

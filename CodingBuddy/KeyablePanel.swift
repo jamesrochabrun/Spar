@@ -1,6 +1,6 @@
 //
 //  KeyablePanel.swift
-//  Easel
+//  CodingBuddy
 //
 
 import AppKit

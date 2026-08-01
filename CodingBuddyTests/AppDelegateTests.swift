@@ -1,6 +1,6 @@
 //
 //  AppDelegateTests.swift
-//  EaselTests
+//  CodingBuddyTests
 //
 
 import AppKit

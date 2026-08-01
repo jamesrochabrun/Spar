@@ -1,6 +1,6 @@
 //
 //  AppDelegate.swift
-//  Easel
+//  CodingBuddy
 //
 
 import AppKit

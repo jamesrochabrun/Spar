@@ -1,6 +1,6 @@
 //
 //  CanvasProjectTokenBadge.swift
-//  Easel
+//  CodingBuddy
 //
 
 import ClaudeCodeCore

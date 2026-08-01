@@ -1,6 +1,6 @@
 //
 //  WindowControllerTests.swift
-//  EaselTests
+//  CodingBuddyTests
 //
 
 import AppKit

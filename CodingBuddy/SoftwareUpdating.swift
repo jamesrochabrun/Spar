@@ -1,6 +1,6 @@
 //
 //  SoftwareUpdating.swift
-//  Easel
+//  CodingBuddy
 //
 
 @MainActor

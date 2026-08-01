@@ -1,6 +1,6 @@
 //
 //  WindowMetrics.swift
-//  Easel
+//  CodingBuddy
 //
 
 import AppKit

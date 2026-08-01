@@ -96,10 +96,10 @@ jobs:
           TEAM_ID: ${{ secrets.TEAM_ID }}
         run: |
           xcodebuild \
-            -project Easel.xcodeproj \
-            -scheme Easel \
+            -project CodingBuddy.xcodeproj \
+            -scheme CodingBuddy \
             -configuration Release \
-            -archivePath build/Easel.xcarchive \
+            -archivePath build/CodingBuddy.xcarchive \
             -derivedDataPath build/DerivedData \
             -skipPackagePluginValidation \
             -skipMacroValidation \
@@ -133,7 +133,7 @@ jobs:
 
           xcodebuild \
             -exportArchive \
-            -archivePath build/Easel.xcarchive \
+            -archivePath build/CodingBuddy.xcarchive \
             -exportPath build \
             -exportOptionsPlist build/ExportOptions.plist
 
@@ -143,22 +143,22 @@ jobs:
           TEAM_ID: ${{ secrets.TEAM_ID }}
           APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
         run: |
-          ditto -c -k --keepParent build/Easel.app build/Easel-notarization.zip
+          ditto -c -k --keepParent build/CodingBuddy.app build/CodingBuddy-notarization.zip
 
-          xcrun notarytool submit build/Easel-notarization.zip \
+          xcrun notarytool submit build/CodingBuddy-notarization.zip \
             --apple-id "$APPLE_ID" \
             --team-id "$TEAM_ID" \
             --password "$APP_PASSWORD" \
             --wait
 
-          xcrun stapler staple build/Easel.app
+          xcrun stapler staple build/CodingBuddy.app
 
       - name: Create zip for Sparkle updates
         run: |
-          rm -f build/Easel.app.zip
-          ditto -c -k --keepParent build/Easel.app build/Easel.app.zip
-          stat -f%z build/Easel.app.zip > build/Easel.app.zip.size
-          echo "Zip file size: $(cat build/Easel.app.zip.size) bytes"
+          rm -f build/CodingBuddy.app.zip
+          ditto -c -k --keepParent build/CodingBuddy.app build/CodingBuddy.app.zip
+          stat -f%z build/CodingBuddy.app.zip > build/CodingBuddy.app.zip.size
+          echo "Zip file size: $(cat build/CodingBuddy.app.zip.size) bytes"
 
       - name: Generate Sparkle signature
         env:
@@ -176,23 +176,23 @@ jobs:
           fi
 
           echo "$SPARKLE_PRIVATE_KEY" | "$SIGN_UPDATE" \
-            build/Easel.app.zip \
+            build/CodingBuddy.app.zip \
             --ed-key-file - > build/sparkle-signature.txt
           cat build/sparkle-signature.txt
 
       - name: Create DMG
         run: |
-          rm -f build/Easel.dmg
+          rm -f build/CodingBuddy.dmg
           create-dmg \
-            --volname "Easel" \
+            --volname "CodingBuddy" \
             --window-pos 200 120 \
             --window-size 600 400 \
             --icon-size 100 \
-            --icon "Easel.app" 150 185 \
+            --icon "CodingBuddy.app" 150 185 \
             --app-drop-link 450 185 \
-            --hide-extension "Easel.app" \
-            build/Easel.dmg \
-            build/Easel.app
+            --hide-extension "CodingBuddy.app" \
+            build/CodingBuddy.dmg \
+            build/CodingBuddy.app
 
       - name: Notarize DMG
         env:
@@ -200,29 +200,29 @@ jobs:
           TEAM_ID: ${{ secrets.TEAM_ID }}
           APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
         run: |
-          xcrun notarytool submit build/Easel.dmg \
+          xcrun notarytool submit build/CodingBuddy.dmg \
             --apple-id "$APPLE_ID" \
             --team-id "$TEAM_ID" \
             --password "$APP_PASSWORD" \
             --wait
 
-          xcrun stapler staple build/Easel.dmg
+          xcrun stapler staple build/CodingBuddy.dmg
 
       - name: Generate checksums
         run: |
-          shasum -a 256 build/Easel.dmg > build/Easel.dmg.sha256
-          shasum -a 256 build/Easel.app.zip > build/Easel.app.zip.sha256
-          cat build/Easel.dmg.sha256
-          cat build/Easel.app.zip.sha256
+          shasum -a 256 build/CodingBuddy.dmg > build/CodingBuddy.dmg.sha256
+          shasum -a 256 build/CodingBuddy.app.zip > build/CodingBuddy.app.zip.sha256
+          cat build/CodingBuddy.dmg.sha256
+          cat build/CodingBuddy.app.zip.sha256
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: |
-            build/Easel.dmg
-            build/Easel.dmg.sha256
-            build/Easel.app.zip
-            build/Easel.app.zip.sha256
+            build/CodingBuddy.dmg
+            build/CodingBuddy.dmg.sha256
+            build/CodingBuddy.app.zip
+            build/CodingBuddy.app.zip.sha256
             build/sparkle-signature.txt
           draft: false
           prerelease: false
@@ -235,12 +235,12 @@ jobs:
           if [ -z "$ED_SIGNATURE" ]; then
             ED_SIGNATURE=$(head -1 build/sparkle-signature.txt)
           fi
-          LENGTH=$(cat build/Easel.app.zip.size)
+          LENGTH=$(cat build/CodingBuddy.app.zip.size)
 
           {
             echo '    <item>'
             echo "      <title>Version ${VERSION}</title>"
-            echo "      <link>https://github.com/jamesrochabrun/Easel/releases/tag/v${VERSION}</link>"
+            echo "      <link>https://github.com/jamesrochabrun/CodingBuddy/releases/tag/v${VERSION}</link>"
             echo "      <sparkle:version>${BUILD_NUMBER}</sparkle:version>"
             echo "      <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>"
             echo '      <description><![CDATA['
@@ -251,7 +251,7 @@ jobs:
             echo '      ]]></description>'
             echo "      <pubDate>${PUB_DATE}</pubDate>"
             echo '      <enclosure'
-            echo "        url=\"https://github.com/jamesrochabrun/Easel/releases/download/v${VERSION}/Easel.app.zip\""
+            echo "        url=\"https://github.com/jamesrochabrun/CodingBuddy/releases/download/v${VERSION}/CodingBuddy.app.zip\""
             echo "        sparkle:version=\"${BUILD_NUMBER}\""
             echo "        sparkle:shortVersionString=\"${VERSION}\""
             echo "        sparkle:edSignature=\"${ED_SIGNATURE}\""
