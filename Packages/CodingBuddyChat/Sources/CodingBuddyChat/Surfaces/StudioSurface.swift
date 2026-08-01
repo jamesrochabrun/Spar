@@ -7,19 +7,21 @@ import Foundation
 import InterviewKit
 
 /// Right-panel surfaces. Availability and the default surface derive from the
-/// active session's mode.
+/// active session's mode. Coding modes default to the workspace (the problem
+/// statement is embedded there); the hints surface carries strategy guidance
+/// and the hint budget.
 public enum StudioSurface: String, CaseIterable, Identifiable {
-  case problem     // question markdown, difficulty/topic chips, attempt status
-  case workspace   // SourceCodeEditorView over the attempt workspace dir
-  case whiteboard  // MCP app surface (excalidraw) — WP7
+  case workspace   // SourceCodeEditorView over the attempt workspace dir, problem embedded
+  case hints       // strategy guidance, hint budget, question recap
+  case whiteboard  // MCP app surface (excalidraw)
   case report      // rubric bars, per-dimension comments, improvement notes
 
   public var id: String { rawValue }
 
   public var displayName: String {
     switch self {
-    case .problem: return "Problem"
     case .workspace: return "Workspace"
+    case .hints: return "Hints"
     case .whiteboard: return "Whiteboard"
     case .report: return "Report"
     }
@@ -27,8 +29,8 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
 
   public var systemImage: String {
     switch self {
-    case .problem: return "doc.text"
     case .workspace: return "chevron.left.forwardslash.chevron.right"
+    case .hints: return "lightbulb"
     case .whiteboard: return "rectangle.3.group"
     case .report: return "chart.bar.doc.horizontal"
     }
@@ -37,15 +39,19 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
   public static func available(for mode: SessionMode?) -> [StudioSurface] {
     switch mode {
     case .systemDesign:
-      return [.problem, .whiteboard, .report]
+      return [.whiteboard, .hints, .report]
     case .behavioral:
-      return [.problem, .report]
+      return [.hints, .report]
     case .mockInterview, .drill, .practice, nil:
-      return [.problem, .workspace, .whiteboard, .report]
+      return [.workspace, .hints, .whiteboard, .report]
     }
   }
 
   public static func defaultSurface(for mode: SessionMode?) -> StudioSurface {
-    mode == .systemDesign ? .whiteboard : .problem
+    switch mode {
+    case .systemDesign: return .whiteboard
+    case .behavioral: return .hints
+    default: return .workspace
+    }
   }
 }

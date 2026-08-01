@@ -20,7 +20,7 @@ struct MainContentView: View {
   @State private var didHandleInitialPrompt = false
   @State private var sheetTopics: [Topic] = []
   @State private var sheetBankQuestions: [Question] = []
-  @State private var selectedSurface: StudioSurface = .problem
+  @State private var selectedSurface: StudioSurface = .workspace
   @State private var contentMode: MainContentMode = .session
   @Environment(\.colorScheme) private var colorScheme
 
@@ -302,18 +302,23 @@ struct MainContentView: View {
       // Same ZStack + opacity/hit-testing switching as Easel's canvas panel:
       // surfaces stay alive (editor buffers, whiteboard web view) while hidden.
       ZStack {
-        ProblemStatementView(
+        HintsView(
           question: chatService.interviewSession.activeQuestion,
-          attempt: chatService.interviewSession.activeAttempt
+          attempt: chatService.interviewSession.activeAttempt,
+          mode: chatService.currentMode,
+          hintsRemaining: chatService.interviewSession.hintsRemaining,
+          onRequestHint: {
+            chatService.requestHint()
+          }
         )
-        .opacity(selectedSurface == .problem ? 1 : 0)
-        .allowsHitTesting(selectedSurface == .problem)
-        .accessibilityHidden(selectedSurface != .problem)
+        .opacity(selectedSurface == .hints ? 1 : 0)
+        .allowsHitTesting(selectedSurface == .hints)
+        .accessibilityHidden(selectedSurface != .hints)
 
         if availableSurfaces.contains(.workspace) {
           WorkspaceEditorView(
             workspacePath: chatService.interviewSession.activeAttempt?.workspacePath,
-            languageHint: chatService.interviewSession.activeQuestion?.languageHint
+            question: chatService.interviewSession.activeQuestion
           )
           .opacity(selectedSurface == .workspace ? 1 : 0)
           .allowsHitTesting(selectedSurface == .workspace)
@@ -370,7 +375,7 @@ struct MainContentView: View {
         host: chatService.mcpApps,
         onDismiss: {
           selectedSurface = StudioSurface.defaultSurface(for: chatService.currentMode) == .whiteboard
-            ? .problem
+            ? .hints
             : StudioSurface.defaultSurface(for: chatService.currentMode)
         },
         isEmbedded: true

@@ -12,19 +12,22 @@ import SwiftUI
 
 public struct WorkspaceEditorView: View {
   private let workspacePath: String?
-  private let languageHint: String?
+  private let question: Question?
 
   @State private var files: [WorkspaceFile] = []
   @State private var selectedFile: WorkspaceFile?
   @State private var fileContent: String = ""
   @State private var isSaving = false
   @State private var loadError: String?
+  @State private var isProblemExpanded = true
   @Environment(\.colorScheme) private var colorScheme
 
-  public init(workspacePath: String?, languageHint: String?) {
+  public init(workspacePath: String?, question: Question?) {
     self.workspacePath = workspacePath
-    self.languageHint = languageHint
+    self.question = question
   }
+
+  private var languageHint: String? { question?.languageHint }
 
   struct WorkspaceFile: Identifiable, Equatable {
     let url: URL
@@ -36,7 +39,17 @@ public struct WorkspaceEditorView: View {
   public var body: some View {
     Group {
       if let workspacePath {
-        content(workspacePath: workspacePath)
+        VStack(spacing: 0) {
+          if let question {
+            problemHeader(question)
+
+            Rectangle()
+              .fill(EaselDesignSystem.Palette.border(for: colorScheme))
+              .frame(height: 1)
+          }
+
+          content(workspacePath: workspacePath)
+        }
       } else {
         ContentUnavailableView {
           Label("No workspace", systemImage: "folder")
@@ -50,6 +63,79 @@ public struct WorkspaceEditorView: View {
     .task(id: workspacePath) {
       refreshFiles()
     }
+    .onChange(of: question?.id) { _, _ in
+      // A freshly presented question re-opens the statement.
+      isProblemExpanded = true
+    }
+  }
+
+  /// The problem lives with the editor: collapsible statement above the code,
+  /// so solving never requires flipping tabs.
+  private func problemHeader(_ question: Question) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Button {
+        withAnimation(.easeInOut(duration: 0.18)) {
+          isProblemExpanded.toggle()
+        }
+      } label: {
+        HStack(spacing: 8) {
+          Image(systemName: "chevron.right")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
+            .rotationEffect(.degrees(isProblemExpanded ? 90 : 0))
+
+          Text(question.title)
+            .font(EaselDesignSystem.Typography.interface(size: 14, weight: .semibold))
+            .lineLimit(1)
+
+          difficultyChip(question.difficulty)
+
+          Spacer()
+
+          Text("Write your solution below — ⌘S saves; graded on End & Grade")
+            .font(.caption2)
+            .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
+            .lineLimit(1)
+        }
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+
+      if isProblemExpanded {
+        ScrollView {
+          Text(promptText(question))
+            .font(.system(size: 13))
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxHeight: 180)
+      }
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 10)
+    .background(EaselDesignSystem.Palette.surface(for: colorScheme))
+  }
+
+  private func difficultyChip(_ difficulty: Difficulty) -> some View {
+    let color: Color
+    switch difficulty {
+    case .easy: color = .green
+    case .medium: color = .orange
+    case .hard: color = .red
+    }
+    return Text(difficulty.displayName)
+      .font(.system(size: 10, weight: .semibold))
+      .foregroundStyle(color)
+      .padding(.horizontal, 7)
+      .padding(.vertical, 2)
+      .background(Capsule().fill(color.opacity(0.15)))
+  }
+
+  private func promptText(_ question: Question) -> AttributedString {
+    (try? AttributedString(
+      markdown: question.promptMarkdown,
+      options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+    )) ?? AttributedString(question.promptMarkdown)
   }
 
   @ViewBuilder
@@ -58,7 +144,7 @@ public struct WorkspaceEditorView: View {
       ContentUnavailableView {
         Label("Empty workspace", systemImage: "folder")
       } description: {
-        Text("Create a solution file to start coding, or let Buddy write files here.")
+        Text("Create a solution file and write your code here. Save with ⌘S — Buddy grades these files when you End & Grade.")
       } actions: {
         Button("Create \(starterFileName)") {
           createStarterFile(in: workspacePath)
