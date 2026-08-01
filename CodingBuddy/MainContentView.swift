@@ -21,6 +21,7 @@ struct MainContentView: View {
   @State private var sheetTopics: [Topic] = []
   @State private var sheetBankQuestions: [Question] = []
   @State private var selectedSurface: StudioSurface = .problem
+  @State private var contentMode: MainContentMode = .session
   @Environment(\.colorScheme) private var colorScheme
 
   private let chatPanelWidth: CGFloat = 380
@@ -44,38 +45,43 @@ struct MainContentView: View {
           .frame(width: 1)
       }
 
-      if panelLayoutState.showsChatPanel {
-        VStack(spacing: 0) {
-          HStack {
-            leadingToolbarButtons
+      if contentMode == .dashboard {
+        dashboardPanel
+      } else {
+        if panelLayoutState.showsChatPanel {
+          VStack(spacing: 0) {
+            HStack {
+              leadingToolbarButtons
 
-            Spacer()
+              Spacer()
 
-            hintRequestButton
+              hintRequestButton
+            }
+            .padding(.leading, chatToolbarLeadingPadding)
+            .padding(.trailing, EaselDesignSystem.Spacing.large)
+            .frame(height: EaselDesignSystem.Spacing.toolbarHeight)
+            .background(EaselDesignSystem.Palette.surface(for: colorScheme))
+
+            Rectangle()
+              .fill(EaselDesignSystem.Palette.border(for: colorScheme))
+              .frame(height: 1)
+
+            ChatPanelView(chatService: chatService)
+              .frame(maxHeight: .infinity)
           }
-          .padding(.leading, chatToolbarLeadingPadding)
-          .padding(.trailing, EaselDesignSystem.Spacing.large)
-          .frame(height: EaselDesignSystem.Spacing.toolbarHeight)
-          .background(EaselDesignSystem.Palette.surface(for: colorScheme))
+          .frame(width: chatPanelWidth)
+          .frame(maxHeight: .infinity)
+          .transition(.move(edge: .leading).combined(with: .opacity))
 
           Rectangle()
             .fill(EaselDesignSystem.Palette.border(for: colorScheme))
-            .frame(height: 1)
-
-          ChatPanelView(chatService: chatService)
-            .frame(maxHeight: .infinity)
+            .frame(width: 1)
         }
-        .frame(width: chatPanelWidth)
-        .frame(maxHeight: .infinity)
-        .transition(.move(edge: .leading).combined(with: .opacity))
 
-        Rectangle()
-          .fill(EaselDesignSystem.Palette.border(for: colorScheme))
-          .frame(width: 1)
+        studioSurfacePanel
       }
-
-      studioSurfacePanel
     }
+    .animation(.easeInOut(duration: 0.22), value: contentMode)
     .background(alignment: .topLeading) {
       // Hidden button hosts the window-level keyboard shortcut.
       Button("Cycle panel layout", action: cyclePanelLayout)
@@ -112,6 +118,9 @@ struct MainContentView: View {
       chatService.onEvaluationRecorded = { _ in
         selectedSurface = .report
       }
+      vm.onDashboardToggle = {
+        contentMode = contentMode == .dashboard ? .session : .dashboard
+      }
       vm.onDeleteSession = { session in
         Task {
           await chatService.deleteSession(session)
@@ -142,6 +151,63 @@ struct MainContentView: View {
 
   private var shouldShowSidebar: Bool {
     panelLayoutState.showsSidebar
+  }
+
+  private var dashboardPanel: some View {
+    VStack(spacing: 0) {
+      HStack(spacing: 8) {
+        if !shouldShowSidebar {
+          leadingToolbarButtons
+        }
+
+        Text("Dashboard")
+          .font(EaselDesignSystem.Typography.interface(size: 14, weight: .semibold))
+
+        Spacer()
+
+        Button("Back to Session") {
+          contentMode = .session
+        }
+        .controlSize(.small)
+      }
+      .padding(.leading, shouldShowSidebar ? 16 : windowControlLeadingReserve)
+      .padding(.trailing, 16)
+      .frame(height: EaselDesignSystem.Spacing.toolbarHeight)
+      .background(EaselDesignSystem.Palette.surface(for: colorScheme))
+
+      Rectangle()
+        .fill(EaselDesignSystem.Palette.border(for: colorScheme))
+        .frame(height: 1)
+
+      DashboardView(
+        skillStats: chatService.skillStats,
+        onRetryQuestion: { question in
+          contentMode = .session
+          selectedSurface = StudioSurface.defaultSurface(for: question.mode)
+          let request = ChatService.NewSessionRequest(
+            mode: question.mode,
+            question: question,
+            durationSeconds: question.mode.isTimedByDefault ? 35 * 60 : nil
+          )
+          sidebarViewModel?.preparePendingNewSession(mode: question.mode, workingDirectory: nil)
+          sidebarViewModel?.onStartSession?(request)
+        },
+        onOpenSession: { chatSessionId in
+          contentMode = .session
+          Task {
+            if let session = try? await chatService.sessionStorage.getSession(id: chatSessionId) {
+              sidebarViewModel?.selectedSessionId = chatSessionId
+              await chatService.switchToSession(session)
+              await sidebarViewModel?.loadSessions()
+            }
+          }
+        },
+        questionProvider: { questionId in
+          await chatService.questionBank.question(id: questionId)
+        }
+      )
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   private func newSessionSheet(for sidebarVM: SidebarViewModel) -> some View {
@@ -387,4 +453,9 @@ struct MainContentView: View {
       ? "arrow.down.right.and.arrow.up.left"
       : "arrow.up.left.and.arrow.down.right"
   }
+}
+
+private enum MainContentMode: Equatable {
+  case dashboard
+  case session
 }
