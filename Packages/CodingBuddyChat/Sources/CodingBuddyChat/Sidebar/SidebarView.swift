@@ -6,19 +6,26 @@
 import ClaudeCodeCore
 import CodingBuddyKit
 import Foundation
+import InterviewKit
 import SwiftUI
 
 public struct SidebarView: View {
   @Bindable var sidebarViewModel: SidebarViewModel
   private let reservesWindowControls: Bool
+  private let newSessionSheetProvider: () -> AnyView
 
   @State private var showDeleteSessionConfirmation = false
   @State private var sessionToDelete: StoredSession?
   @Environment(\.colorScheme) private var colorScheme
 
-  public init(sidebarViewModel: SidebarViewModel, reservesWindowControls: Bool = false) {
+  public init(
+    sidebarViewModel: SidebarViewModel,
+    reservesWindowControls: Bool = false,
+    newSessionSheetProvider: @escaping () -> AnyView
+  ) {
     self.sidebarViewModel = sidebarViewModel
     self.reservesWindowControls = reservesWindowControls
+    self.newSessionSheetProvider = newSessionSheetProvider
   }
 
   public var body: some View {
@@ -30,36 +37,13 @@ public struct SidebarView: View {
         .frame(height: 1)
 
       ScrollView {
-        VStack(alignment: .leading, spacing: 8) {
-          sessionListHeader
-
-          if sidebarViewModel.sessions.isEmpty {
-            Text("No sessions yet")
-              .font(.callout)
-              .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .padding(.vertical, 8)
-          } else {
-            LazyVStack(alignment: .leading, spacing: 6) {
-              ForEach(sidebarViewModel.sessions) { session in
-                SidebarSessionRow(
-                  session: session,
-                  isSelected: session.id == sidebarViewModel.selectedSessionId,
-                  onSelect: {
-                    sidebarViewModel.selectSession(session)
-                  },
-                  onDelete: {
-                    sessionToDelete = session
-                    showDeleteSessionConfirmation = true
-                  }
-                )
-                .transition(.opacity.combined(with: .move(edge: .top)))
-              }
-            }
-            .animation(.easeInOut(duration: 0.22), value: sidebarViewModel.sessions.map(\.id))
+        LazyVStack(alignment: .leading, spacing: 10) {
+          ForEach(sidebarViewModel.modeGroups) { group in
+            modeGroupSection(group)
           }
         }
         .padding(12)
+        .animation(.easeInOut(duration: 0.22), value: groupAnimationValue)
       }
     }
     .background(EaselDesignSystem.Palette.canvas(for: colorScheme))
@@ -76,6 +60,9 @@ public struct SidebarView: View {
       }
     } message: {
       Text("Are you sure you want to delete this session? This action cannot be undone.")
+    }
+    .sheet(isPresented: $sidebarViewModel.isNewSessionSheetPresented) {
+      newSessionSheetProvider()
     }
     .task {
       await sidebarViewModel.loadSessions()
@@ -100,9 +87,19 @@ public struct SidebarView: View {
       Spacer()
 
       Button {
-        sidebarViewModel.requestNewChat(workingDirectory: nil)
+        sidebarViewModel.requestDashboard()
       } label: {
-        Image(systemName: "square.and.pencil")
+        Image(systemName: "chart.bar.xaxis")
+          .font(.system(size: 13, weight: .medium))
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+      .help("Dashboard")
+
+      Button {
+        sidebarViewModel.requestNewSession()
+      } label: {
+        Image(systemName: "plus")
           .font(.system(size: 14, weight: .medium))
       }
       .buttonStyle(.plain)
@@ -123,25 +120,73 @@ public struct SidebarView: View {
     reservesWindowControls ? 78 : 16
   }
 
-  private var sessionListHeader: some View {
-    HStack {
-      Text("Sessions")
-        .font(EaselDesignSystem.Typography.interface(size: 14, weight: .semibold))
-        .foregroundStyle(.primary)
-
-      Spacer()
-
+  @ViewBuilder
+  private func modeGroupSection(_ group: ModeGroup) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
       Button {
-        Task {
-          await sidebarViewModel.loadSessions()
-        }
+        sidebarViewModel.toggleGroup(group.mode)
       } label: {
-        Image(systemName: "arrow.clockwise")
-          .font(.system(size: 13, weight: .medium))
+        HStack(spacing: 8) {
+          Image(systemName: group.systemImage)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+            .frame(width: 16)
+
+          Text(group.displayName)
+            .font(EaselDesignSystem.Typography.interface(size: 13, weight: .semibold))
+            .foregroundStyle(.primary)
+
+          if !group.rows.isEmpty {
+            Text("\(group.rows.count)")
+              .font(.system(.caption2, design: .monospaced))
+              .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
+          }
+
+          Spacer()
+
+          Image(systemName: "chevron.right")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
+            .rotationEffect(.degrees(group.isExpanded ? 90 : 0))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
-      .help("Refresh sessions")
+
+      if group.isExpanded {
+        if group.rows.isEmpty {
+          Text("No sessions yet")
+            .font(.caption)
+            .foregroundStyle(.tertiary)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 4)
+        } else {
+          ForEach(group.rows) { row in
+            SidebarSessionRow(
+              row: row,
+              isSelected: row.id == sidebarViewModel.selectedSessionId,
+              onSelect: {
+                sidebarViewModel.selectSession(row.session)
+              },
+              onDelete: {
+                sessionToDelete = row.session
+                showDeleteSessionConfirmation = true
+              }
+            )
+            .padding(.leading, 6)
+            .transition(.opacity.combined(with: .move(edge: .top)))
+          }
+        }
+      }
+    }
+  }
+
+  private var groupAnimationValue: [String] {
+    sidebarViewModel.modeGroups.map { group in
+      let rowIDs = group.rows.map(\.id).joined(separator: ",")
+      return "\(group.id):\(group.isExpanded):\(rowIDs)"
     }
   }
 }

@@ -5,10 +5,11 @@
 
 import ClaudeCodeCore
 import CodingBuddyKit
+import InterviewKit
 import SwiftUI
 
 struct SidebarSessionRow: View {
-  let session: StoredSession
+  let row: AttemptRow
   let isSelected: Bool
   let onSelect: () -> Void
   let onDelete: () -> Void
@@ -23,33 +24,23 @@ struct SidebarSessionRow: View {
           .frame(width: 6, height: 6)
 
         VStack(alignment: .leading, spacing: 2) {
-          HStack {
-            Text(sessionIdPrefix)
+          HStack(spacing: 6) {
+            Text(row.session.provider.displayName)
               .font(.system(.caption2, design: .monospaced))
               .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
 
-            Text(session.provider.displayName)
-              .font(.system(.caption2, design: .monospaced))
-              .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+            statusBadge
 
             Spacer()
 
-            #if DEBUG
-              if session.usageSummary.hasUsage {
-                Text(session.usageSummary.formattedTotalTokens)
-                  .font(.system(.caption2, design: .monospaced))
-                  .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
-                  .lineLimit(1)
-                  .help("Exact provider-reported session API usage: \(session.usageSummary.formattedBreakdown)")
-              }
-            #endif
+            scoreChip
 
             Text(relativeTime)
               .font(.system(.caption2, design: .monospaced))
               .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
           }
 
-          Text(session.firstUserMessage.isEmpty ? "New Session" : session.firstUserMessage)
+          Text(row.displayTitle)
             .font(.system(.caption, design: .monospaced))
             .foregroundStyle(isSelected ? Color.primary : EaselDesignSystem.Palette.secondaryText(for: colorScheme))
             .lineLimit(1)
@@ -72,12 +63,56 @@ struct SidebarSessionRow: View {
     }
   }
 
-  private var sessionIdPrefix: String {
-    String(session.id.prefix(8))
+  @ViewBuilder
+  private var statusBadge: some View {
+    if let status = row.attempt?.status {
+      switch status {
+      case .inProgress:
+        Image(systemName: "circle.dotted")
+          .font(.system(size: 9, weight: .bold))
+          .foregroundStyle(.orange)
+          .help("In progress")
+      case .awaitingEvaluation:
+        Image(systemName: "hourglass")
+          .font(.system(size: 9, weight: .bold))
+          .foregroundStyle(.orange)
+          .help("Awaiting evaluation")
+      case .abandoned:
+        Image(systemName: "xmark.circle")
+          .font(.system(size: 9, weight: .bold))
+          .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
+          .help("Abandoned")
+      case .evaluated:
+        EmptyView()
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var scoreChip: some View {
+    if let score = row.overallScore {
+      Text("\(Int(score.rounded()))")
+        .font(.system(.caption2, design: .monospaced).weight(.semibold))
+        .foregroundStyle(scoreColor(score))
+        .padding(.horizontal, 5)
+        .padding(.vertical, 1)
+        .background(
+          Capsule().fill(scoreColor(score).opacity(0.16))
+        )
+        .help("Overall score: \(Int(score.rounded()))/100")
+    }
+  }
+
+  private func scoreColor(_ score: Double) -> Color {
+    switch score {
+    case ..<50: return .red
+    case ..<75: return .orange
+    default: return .green
+    }
   }
 
   private var relativeTime: String {
-    let interval = Date().timeIntervalSince(session.lastAccessedAt)
+    let interval = Date().timeIntervalSince(row.session.lastAccessedAt)
     if interval < 60 {
       return "now"
     } else if interval < 3600 {

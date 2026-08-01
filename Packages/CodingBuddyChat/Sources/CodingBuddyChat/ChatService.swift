@@ -200,19 +200,28 @@ public final class ChatService: ChatServiceProtocol {
   public struct NewSessionRequest {
     public var mode: SessionMode
     public var question: Question?
+    public var topicIds: [String]
+    public var difficulty: Difficulty?
     public var durationSeconds: Int?
     public var hintBudget: Int
+    public var provider: ChatProvider?
 
     public init(
       mode: SessionMode,
       question: Question? = nil,
+      topicIds: [String] = [],
+      difficulty: Difficulty? = nil,
       durationSeconds: Int? = nil,
-      hintBudget: Int = 3
+      hintBudget: Int = 3,
+      provider: ChatProvider? = nil
     ) {
       self.mode = mode
       self.question = question
+      self.topicIds = topicIds
+      self.difficulty = difficulty
       self.durationSeconds = durationSeconds
       self.hintBudget = hintBudget
+      self.provider = provider
     }
   }
 
@@ -224,6 +233,10 @@ public final class ChatService: ChatServiceProtocol {
 
     await persistVisibleSessionMessages()
     retainCurrentSessionContext()
+
+    if let provider = request.provider, let globalPreferences {
+      globalPreferences.chatProvider = provider
+    }
 
     let provider = globalPreferences?.chatProvider.rawValue ?? "claude"
     let attempt: InterviewAttempt
@@ -308,7 +321,16 @@ public final class ChatService: ChatServiceProtocol {
         \(question.promptMarkdown)
         """
     } else {
-      text = "Let's begin. Present my first question."
+      var constraints: [String] = []
+      if !request.topicIds.isEmpty {
+        constraints.append("Topics: \(request.topicIds.joined(separator: ", "))")
+      }
+      if let difficulty = request.difficulty {
+        constraints.append("Difficulty: \(difficulty.rawValue)")
+      }
+      text = constraints.isEmpty
+        ? "Let's begin. Present my first question."
+        : "Let's begin. Present my first question.\n\(constraints.joined(separator: "\n"))"
     }
     sendMessageToViewModel(text)
   }

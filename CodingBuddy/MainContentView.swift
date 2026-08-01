@@ -3,6 +3,7 @@
 //  CodingBuddy
 //
 
+import ClaudeCodeCore
 import CodingBuddyChat
 import CodingBuddyKit
 import InterviewKit
@@ -16,6 +17,8 @@ struct MainContentView: View {
   @State private var sidebarViewModel: SidebarViewModel?
   @State private var panelLayoutState: CanvasPanelLayoutState = .allPanels
   @State private var didHandleInitialPrompt = false
+  @State private var sheetTopics: [Topic] = []
+  @State private var sheetBankQuestions: [Question] = []
   @Environment(\.colorScheme) private var colorScheme
 
   private let chatPanelWidth: CGFloat = 380
@@ -25,8 +28,12 @@ struct MainContentView: View {
   var body: some View {
     HStack(spacing: 0) {
       if let sidebarVM = sidebarViewModel, shouldShowSidebar {
-        SidebarView(sidebarViewModel: sidebarVM, reservesWindowControls: true)
-          .frame(width: sidebarWidth)
+        SidebarView(
+          sidebarViewModel: sidebarVM,
+          reservesWindowControls: true,
+          newSessionSheetProvider: { AnyView(newSessionSheet(for: sidebarVM)) }
+        )
+        .frame(width: sidebarWidth)
           .frame(maxHeight: .infinity)
           .transition(.move(edge: .leading))
 
@@ -81,7 +88,10 @@ struct MainContentView: View {
     .ignoresSafeArea(.container, edges: .top)
     .tint(EaselDesignSystem.Palette.accent)
     .task {
-      let vm = SidebarViewModel(sessionStorage: chatService.sessionStorage)
+      let vm = SidebarViewModel(
+        sessionStorage: chatService.sessionStorage,
+        interviewStorage: chatService.interviewStorage
+      )
       vm.onSessionSelected = { session in
         Task {
           await chatService.initialize()
@@ -89,10 +99,10 @@ struct MainContentView: View {
           await vm.loadSessions()
         }
       }
-      vm.onNewChatRequested = { workingDirectory in
+      vm.onStartSession = { request in
         Task {
           await chatService.initialize()
-          await chatService.startNewSession(workingDirectory: workingDirectory)
+          await chatService.startNewSession(request)
           await vm.loadSessions()
         }
       }
@@ -126,6 +136,26 @@ struct MainContentView: View {
 
   private var shouldShowSidebar: Bool {
     panelLayoutState.showsSidebar
+  }
+
+  private func newSessionSheet(for sidebarVM: SidebarViewModel) -> some View {
+    NewSessionSheet(
+      topics: sheetTopics,
+      bankQuestions: sheetBankQuestions,
+      defaultProvider: chatService.globalPreferences?.chatProvider ?? .claude,
+      onStart: { request in
+        sidebarVM.isNewSessionSheetPresented = false
+        sidebarVM.preparePendingNewSession(mode: request.mode, workingDirectory: nil)
+        sidebarVM.onStartSession?(request)
+      },
+      onCancel: {
+        sidebarVM.isNewSessionSheetPresented = false
+      }
+    )
+    .task {
+      sheetTopics = (try? await chatService.interviewStorage.allTopics()) ?? []
+      sheetBankQuestions = await chatService.questionBank.questions()
+    }
   }
 
   // Deterministic hint layer: coding modes only, disabled once the budget is
