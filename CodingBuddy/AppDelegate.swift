@@ -4,8 +4,8 @@
 //
 
 import AppKit
-import EaselChat
-import EaselKit
+import CodingBuddyChat
+import CodingBuddyKit
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {

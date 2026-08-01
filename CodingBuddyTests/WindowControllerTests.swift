@@ -4,8 +4,8 @@
 //
 
 import AppKit
-import EaselChat
-import EaselKit
+import CodingBuddyChat
+import CodingBuddyKit
 import Testing
 @testable import CodingBuddy
 
@@ -135,7 +135,7 @@ struct WindowControllerTests {
     let appState = AppState()
     appState.promptText = "Build a dashboard"
 
-    let view = CanvasContentView(
+    let view = MainContentView(
       appState: appState,
       initialPrompt: appState.promptText,
       chatService: ChatService()

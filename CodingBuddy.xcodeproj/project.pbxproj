@@ -8,8 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		BB0000012FA0000700000007 /* ApprovalServerKit in Frameworks */ = {isa = PBXBuildFile; productRef = BB0000012FA0000800000008 /* ApprovalServerKit */; };
-		CC0000010000000100000001 /* EaselKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000010000000200000002 /* EaselKit */; };
-		CC0000010000000300000003 /* EaselChat in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000010000000400000004 /* EaselChat */; };
+		CC0000010000000100000001 /* CodingBuddyKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000010000000200000002 /* CodingBuddyKit */; };
+		CC0000010000000300000003 /* CodingBuddyChat in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000010000000400000004 /* CodingBuddyChat */; };
 		FA0000010000000100000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000010000000200000002 /* Sparkle */; };
 /* End PBXBuildFile section */
 
@@ -59,8 +59,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CC0000010000000100000001 /* EaselKit in Frameworks */,
-				CC0000010000000300000003 /* EaselChat in Frameworks */,
+				CC0000010000000100000001 /* CodingBuddyKit in Frameworks */,
+				CC0000010000000300000003 /* CodingBuddyChat in Frameworks */,
 				BB0000012FA0000700000007 /* ApprovalServerKit in Frameworks */,
 				FA0000010000000100000001 /* Sparkle in Frameworks */,
 			);
@@ -124,8 +124,8 @@
 			);
 			name = CodingBuddy;
 			packageProductDependencies = (
-				CC0000010000000200000002 /* EaselKit */,
-				CC0000010000000400000004 /* EaselChat */,
+				CC0000010000000200000002 /* CodingBuddyKit */,
+				CC0000010000000400000004 /* CodingBuddyChat */,
 				BB0000012FA0000800000008 /* ApprovalServerKit */,
 				FA0000010000000200000002 /* Sparkle */,
 			);
@@ -212,8 +212,8 @@
 			mainGroup = 7BC42BE92F70C19600D3FEC6;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				CC0000010000000700000007 /* XCLocalSwiftPackageReference "Packages/EaselKit" */,
-				CC0000010000000800000008 /* XCLocalSwiftPackageReference "Packages/EaselChat" */,
+				CC0000010000000700000007 /* XCLocalSwiftPackageReference "Packages/CodingBuddyKit" */,
+				CC0000010000000800000008 /* XCLocalSwiftPackageReference "Packages/CodingBuddyChat" */,
 				BB0000012FA0000A0000000A /* XCRemoteSwiftPackageReference "ClaudeCodeApprovalServer" */,
 				FA0000010000000300000003 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
@@ -611,13 +611,13 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		CC0000010000000700000007 /* XCLocalSwiftPackageReference "Packages/EaselKit" */ = {
+		CC0000010000000700000007 /* XCLocalSwiftPackageReference "Packages/CodingBuddyKit" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/EaselKit;
+			relativePath = Packages/CodingBuddyKit;
 		};
-		CC0000010000000800000008 /* XCLocalSwiftPackageReference "Packages/EaselChat" */ = {
+		CC0000010000000800000008 /* XCLocalSwiftPackageReference "Packages/CodingBuddyChat" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/EaselChat;
+			relativePath = Packages/CodingBuddyChat;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -646,13 +646,13 @@
 			package = BB0000012FA0000A0000000A /* XCRemoteSwiftPackageReference "ClaudeCodeApprovalServer" */;
 			productName = ApprovalServerKit;
 		};
-		CC0000010000000200000002 /* EaselKit */ = {
+		CC0000010000000200000002 /* CodingBuddyKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = EaselKit;
+			productName = CodingBuddyKit;
 		};
-		CC0000010000000400000004 /* EaselChat */ = {
+		CC0000010000000400000004 /* CodingBuddyChat */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = EaselChat;
+			productName = CodingBuddyChat;
 		};
 		FA0000010000000200000002 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;

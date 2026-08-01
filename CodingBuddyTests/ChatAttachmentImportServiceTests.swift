@@ -13,7 +13,7 @@ struct ChatAttachmentImportServiceTests {
   @Test
   func droppedImageDataCreatesTemporaryAttachment() async throws {
     let temporaryDirectory = FileManager.default.temporaryDirectory
-      .appendingPathComponent("EaselChatAttachmentImportServiceTests")
+      .appendingPathComponent("CodingBuddyChatAttachmentImportServiceTests")
       .appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
     defer {
@@ -117,7 +117,7 @@ struct ChatAttachmentImportServiceTests {
 
   private func makeTemporaryDirectory() throws -> URL {
     let url = FileManager.default.temporaryDirectory
-      .appendingPathComponent("EaselChatAttachmentImportServiceTests")
+      .appendingPathComponent("CodingBuddyChatAttachmentImportServiceTests")
       .appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url

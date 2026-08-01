@@ -3,7 +3,7 @@
 //  EaselTests
 //
 
-import EaselKit
+import CodingBuddyKit
 import Foundation
 import Testing
 
@@ -17,7 +17,7 @@ struct AccentColorAssetTests {
 
     let assetPaths = [
       "CodingBuddy/Assets.xcassets/AccentColor.colorset/Contents.json",
-      "Packages/EaselClaudeCodeUI/Sources/ClaudeCodeCore/Assets.xcassets/AccentColor.colorset/Contents.json",
+      "Packages/CodingBuddyClaudeCodeUI/Sources/ClaudeCodeCore/Assets.xcassets/AccentColor.colorset/Contents.json",
     ]
 
     for assetPath in assetPaths {

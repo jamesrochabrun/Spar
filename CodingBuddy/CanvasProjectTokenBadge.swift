@@ -4,7 +4,7 @@
 //
 
 import ClaudeCodeCore
-import EaselKit
+import CodingBuddyKit
 import SwiftUI
 
 struct CanvasProjectTokenBadge: View {

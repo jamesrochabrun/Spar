@@ -3,8 +3,8 @@
 //  CodingBuddy
 //
 
-import EaselKit
-import EaselChat
+import CodingBuddyKit
+import CodingBuddyChat
 import SwiftUI
 
 @main
@@ -13,7 +13,7 @@ struct CodingBuddyApp: App {
 
   var body: some Scene {
     Settings {
-      EaselChatSettingsView(chatService: appDelegate.chatService)
+      CodingBuddyChatSettingsView(chatService: appDelegate.chatService)
         .tint(EaselDesignSystem.Palette.accent)
     }
     .commands {

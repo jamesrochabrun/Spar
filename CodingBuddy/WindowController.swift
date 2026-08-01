@@ -4,8 +4,8 @@
 //
 
 import AppKit
-import EaselChat
-import EaselKit
+import CodingBuddyChat
+import CodingBuddyKit
 import SwiftUI
 
 @MainActor
@@ -210,7 +210,7 @@ final class WindowController: NSObject, WindowControlling, NSWindowDelegate {
 
   private func configureCanvasContent() {
     let hostingView = NSHostingView(
-      rootView: CanvasContentView(
+      rootView: MainContentView(
         appState: appState,
         initialPrompt: appState.promptText,
         chatService: chatService
