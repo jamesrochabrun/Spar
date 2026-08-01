@@ -2,16 +2,26 @@
 //  CodingBuddyApp.swift
 //  CodingBuddy
 //
-//  Created by James Rochabrun on 7/31/26.
-//
 
+import EaselKit
+import EaselChat
 import SwiftUI
 
 @main
 struct CodingBuddyApp: App {
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-        }
+  @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
+  var body: some Scene {
+    Settings {
+      EaselChatSettingsView(chatService: appDelegate.chatService)
+        .tint(EaselDesignSystem.Palette.accent)
     }
+    .commands {
+      CommandGroup(after: .appInfo) {
+        Button("Check for Updates...") {
+          appDelegate.checkForUpdatesFromMenu(nil)
+        }
+      }
+    }
+  }
 }

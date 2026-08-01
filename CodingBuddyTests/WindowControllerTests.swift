@@ -1,0 +1,147 @@
+//
+//  WindowControllerTests.swift
+//  EaselTests
+//
+
+import AppKit
+import EaselChat
+import EaselKit
+import Testing
+@testable import CodingBuddy
+
+@MainActor
+struct WindowControllerTests {
+
+  @Test
+  func capsuleUsesPanelAndCanvasUsesNativeWindow() {
+    let appState = AppState()
+    let controller = WindowController(
+      appState: appState,
+      chatService: ChatService(),
+      isFloatingChatBarEnabled: true,
+      observesPhaseChanges: false
+    )
+
+    #expect(controller.capsulePanel.styleMask.contains(.nonactivatingPanel))
+    #expect(controller.capsulePanel.level == .floating)
+    #expect(controller.canvasWindow.styleMask.contains(.titled))
+    #expect(controller.canvasWindow.styleMask.contains(.closable))
+    #expect(controller.canvasWindow.styleMask.contains(.miniaturizable))
+    #expect(controller.canvasWindow.styleMask.contains(.resizable))
+    #expect(controller.canvasWindow.styleMask.contains(.fullSizeContentView))
+    #expect(!controller.canvasWindow.styleMask.contains(.nonactivatingPanel))
+    #expect(controller.canvasWindow.titleVisibility == .hidden)
+    #expect(controller.canvasWindow.titlebarAppearsTransparent)
+    #expect(controller.canvasWindow.isMovableByWindowBackground)
+    #expect(controller.canvasWindow.delegate === controller)
+    #expect(!controller.canvasWindow.isReleasedWhenClosed)
+  }
+
+  @Test
+  func closingCanvasWindowReturnsToCapsuleWithoutClosingWindow() {
+    let appState = AppState()
+    appState.phase = .canvas
+    let controller = WindowController(
+      appState: appState,
+      chatService: ChatService(),
+      isFloatingChatBarEnabled: true,
+      observesPhaseChanges: false
+    )
+
+    let shouldClose = controller.windowShouldClose(controller.canvasWindow)
+
+    #expect(!shouldClose)
+    #expect(appState.phase == .capsule)
+  }
+
+  @Test
+  func hideCapsuleOrdersOutPanel() {
+    let appState = AppState()
+    let controller = WindowController(
+      appState: appState,
+      chatService: ChatService(),
+      isFloatingChatBarEnabled: true,
+      observesPhaseChanges: false
+    )
+    controller.showCapsule()
+    #expect(controller.capsulePanel.isVisible)
+
+    controller.hideCapsule()
+    #expect(!controller.capsulePanel.isVisible)
+  }
+
+  @Test
+  func showCanvasOrdersOutCapsuleAndShowsCanvasWindow() {
+    let appState = AppState()
+    let controller = WindowController(
+      appState: appState,
+      chatService: ChatService(),
+      isFloatingChatBarEnabled: true,
+      observesPhaseChanges: false
+    )
+    defer {
+      controller.canvasWindow.orderOut(nil)
+      controller.capsulePanel.orderOut(nil)
+    }
+    controller.showCapsule()
+    #expect(controller.capsulePanel.isVisible)
+
+    controller.showCanvas()
+
+    #expect(!controller.capsulePanel.isVisible)
+    #expect(controller.canvasWindow.isVisible)
+    #expect(controller.canvasWindow.contentView != nil)
+    #expect(controller.canvasWindow.alphaValue == 1)
+  }
+
+  @Test
+  func showCapsuleFallsBackToCanvasWhenFloatingChatBarIsDisabled() {
+    let appState = AppState()
+    let controller = WindowController(
+      appState: appState,
+      chatService: ChatService(),
+      observesPhaseChanges: false
+    )
+    defer {
+      controller.canvasWindow.orderOut(nil)
+      controller.capsulePanel.orderOut(nil)
+    }
+
+    controller.showCapsule()
+
+    #expect(appState.phase == .canvas)
+    #expect(!controller.capsulePanel.isVisible)
+    #expect(controller.canvasWindow.isVisible)
+  }
+
+  @Test
+  func closingCanvasWindowDoesNotReturnToCapsuleWhenFloatingChatBarIsDisabled() {
+    let appState = AppState()
+    appState.phase = .canvas
+    let controller = WindowController(
+      appState: appState,
+      chatService: ChatService(),
+      observesPhaseChanges: false
+    )
+
+    let shouldClose = controller.windowShouldClose(controller.canvasWindow)
+
+    #expect(shouldClose)
+    #expect(appState.phase == .canvas)
+  }
+
+  @Test
+  func canvasContentUsesSubmittedPromptSnapshot() {
+    let appState = AppState()
+    appState.promptText = "Build a dashboard"
+
+    let view = CanvasContentView(
+      appState: appState,
+      initialPrompt: appState.promptText,
+      chatService: ChatService()
+    )
+    appState.promptText = "Edited later"
+
+    #expect(view.initialPrompt == "Build a dashboard")
+  }
+}

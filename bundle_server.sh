@@ -1,0 +1,133 @@
+#!/bin/bash
+
+# Bundle ClaudeCodeApprovalServer into the app
+# This script is called during the Xcode build phase to bundle the approval server
+
+set -e  # Exit on error
+
+echo "Starting to bundle ClaudeCodeApprovalServer..."
+
+# Define paths
+PRODUCT_NAME_IN_PACKAGE="ApprovalMCPServer"
+SERVER_NAME="ApprovalMCPServer"
+BUILD_DIR="${BUILT_PRODUCTS_DIR}"
+APP_CONTENTS="${BUILD_DIR}/${PRODUCT_NAME}.app/Contents"
+RESOURCES_DIR="${APP_CONTENTS}/Resources"
+SERVER_DEST="${RESOURCES_DIR}/${SERVER_NAME}"
+
+# Create Resources directory if it doesn't exist
+mkdir -p "${RESOURCES_DIR}"
+
+# Find the package checkout directory - try multiple locations.
+# Derive the DerivedData root from BUILD_ROOT by stripping everything from Xcode's
+# "/Build/" segment onward. This resolves SourcePackages/checkouts correctly for
+# both default-location builds (Debug/CI) and archives that use a custom
+# -derivedDataPath (e.g. the release workflow), where BUILT_PRODUCTS_DIR points
+# deep into ArchiveIntermediates and the old relative "../../.." math breaks.
+DERIVED_DATA_ROOT="${BUILD_ROOT%%/Build/*}"
+POSSIBLE_PATHS=(
+  "${DERIVED_DATA_ROOT}/SourcePackages/checkouts/ClaudeCodeApprovalServer"
+  "${BUILD_DIR}/../../../SourcePackages/checkouts/ClaudeCodeApprovalServer"
+  "${PROJECT_DIR}/../../../SourcePackages/checkouts/ClaudeCodeApprovalServer"
+  "${SRCROOT}/../../../SourcePackages/checkouts/ClaudeCodeApprovalServer"
+  ~/Library/Developer/Xcode/DerivedData/*/SourcePackages/checkouts/ClaudeCodeApprovalServer
+)
+
+PACKAGE_DIR=""
+for path in "${POSSIBLE_PATHS[@]}"; do
+  # Expand glob patterns
+  for expanded_path in $path; do
+    if [ -d "$expanded_path" ]; then
+      PACKAGE_DIR="$expanded_path"
+      break 2
+    fi
+  done
+done
+
+# Last-resort: search the DerivedData root for the checkout.
+if [ -z "${PACKAGE_DIR}" ] && [ -n "${DERIVED_DATA_ROOT}" ] && [ -d "${DERIVED_DATA_ROOT}" ]; then
+  PACKAGE_DIR=$(find "${DERIVED_DATA_ROOT}" -maxdepth 3 -type d \
+    -path '*/SourcePackages/checkouts/ClaudeCodeApprovalServer' 2>/dev/null | head -1)
+fi
+
+if [ -z "${PACKAGE_DIR}" ] || [ ! -d "${PACKAGE_DIR}" ]; then
+    echo "Error: ClaudeCodeApprovalServer package not found"
+    echo "Tried locations:"
+    for path in "${POSSIBLE_PATHS[@]}"; do
+      echo "  - $path"
+    done
+    echo "Make sure the package is added to your Xcode project"
+    exit 1
+fi
+
+echo "Found package at: ${PACKAGE_DIR}"
+echo "Building ${PRODUCT_NAME_IN_PACKAGE} from source..."
+
+# Build from a temporary copy so we can use the app's resolved dependency graph
+# without mutating Xcode's SourcePackages checkout.
+SERVER_BUILD_PACKAGE_DIR="${TARGET_TEMP_DIR}/ClaudeCodeApprovalServer"
+APP_PACKAGE_RESOLVED="${SRCROOT}/CodingBuddy.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+
+rm -rf "${SERVER_BUILD_PACKAGE_DIR}"
+mkdir -p "${SERVER_BUILD_PACKAGE_DIR}"
+rsync -a --exclude .build "${PACKAGE_DIR}/" "${SERVER_BUILD_PACKAGE_DIR}/"
+
+if [ -f "${APP_PACKAGE_RESOLVED}" ]; then
+    chmod u+w "${SERVER_BUILD_PACKAGE_DIR}/Package.resolved" 2>/dev/null || true
+    cp "${APP_PACKAGE_RESOLVED}" "${SERVER_BUILD_PACKAGE_DIR}/Package.resolved"
+else
+    rm -f "${SERVER_BUILD_PACKAGE_DIR}/Package.resolved"
+fi
+
+cd "${SERVER_BUILD_PACKAGE_DIR}"
+swift build -c release --product "${PRODUCT_NAME_IN_PACKAGE}" -Xswiftc -swift-version -Xswiftc 5
+
+# Find the built executable
+SERVER_SOURCE="${SERVER_BUILD_PACKAGE_DIR}/.build/release/${PRODUCT_NAME_IN_PACKAGE}"
+
+if [ ! -f "${SERVER_SOURCE}" ]; then
+    echo "Error: Failed to build ClaudeCodeApprovalServer"
+    exit 1
+fi
+
+echo "Found server at: ${SERVER_SOURCE}"
+
+# Copy the server to the app bundle
+cp "${SERVER_SOURCE}" "${SERVER_DEST}"
+
+# Make sure it's executable
+chmod +x "${SERVER_DEST}"
+
+# Sign with hardened runtime and entitlements (if signing identity exists)
+if [ -n "${EXPANDED_CODE_SIGN_IDENTITY}" ] && [ "${EXPANDED_CODE_SIGN_IDENTITY}" != "-" ]; then
+    echo "Signing ${SERVER_NAME} with hardened runtime..."
+    ENTITLEMENTS_PATH="${SRCROOT}/CodingBuddy/CodingBuddy.entitlements"
+    if [ -f "${ENTITLEMENTS_PATH}" ]; then
+        codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY}" \
+          --options runtime \
+          --entitlements "${ENTITLEMENTS_PATH}" \
+          --timestamp \
+          "${SERVER_DEST}"
+    else
+        codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY}" \
+          --options runtime \
+          --timestamp \
+          "${SERVER_DEST}"
+    fi
+    echo "Successfully signed ${SERVER_NAME}"
+else
+    echo "Skipping signing (no code sign identity)"
+fi
+
+echo "Successfully bundled ClaudeCodeApprovalServer to ${SERVER_DEST}"
+
+# Verify the bundle
+if [ -f "${SERVER_DEST}" ]; then
+    echo "Verification: Server successfully copied to app bundle"
+    ls -la "${SERVER_DEST}"
+else
+    echo "Error: Failed to copy server to app bundle"
+    exit 1
+fi
+
+exit 0
