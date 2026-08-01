@@ -2,8 +2,11 @@
 //  WorkspaceEditorView.swift
 //  CodingBuddyChat
 //
-//  Workspace surface: a lightweight file list over the attempt workspace
-//  directory plus the native CodeEdit-based editor pane.
+//  Workspace surface: the editor IS the surface. A solution file is created
+//  automatically in the attempt workspace and seeded with the problem
+//  statement as a comment header, so you read and solve in one place. A file
+//  menu appears only when the workspace grows past one file (e.g. Buddy wrote
+//  test files).
 //
 
 import CodingBuddyKit
@@ -19,15 +22,12 @@ public struct WorkspaceEditorView: View {
   @State private var fileContent: String = ""
   @State private var isSaving = false
   @State private var loadError: String?
-  @State private var isProblemExpanded = true
   @Environment(\.colorScheme) private var colorScheme
 
   public init(workspacePath: String?, question: Question?) {
     self.workspacePath = workspacePath
     self.question = question
   }
-
-  private var languageHint: String? { question?.languageHint }
 
   struct WorkspaceFile: Identifiable, Equatable {
     let url: URL
@@ -40,15 +40,21 @@ public struct WorkspaceEditorView: View {
     Group {
       if let workspacePath {
         VStack(spacing: 0) {
-          if let question {
-            problemHeader(question)
+          workspaceBar
 
-            Rectangle()
-              .fill(EaselDesignSystem.Palette.border(for: colorScheme))
-              .frame(height: 1)
-          }
+          Rectangle()
+            .fill(EaselDesignSystem.Palette.border(for: colorScheme))
+            .frame(height: 1)
 
-          content(workspacePath: workspacePath)
+          editorPane
+        }
+        .task(id: workspacePath) {
+          prepareWorkspace(workspacePath)
+        }
+        .onChange(of: question?.id) { _, _ in
+          // The question often lands after the session starts: seed the still
+          // untouched solution file with the problem header when it arrives.
+          prepareWorkspace(workspacePath)
         }
       } else {
         ContentUnavailableView {
@@ -60,177 +66,73 @@ public struct WorkspaceEditorView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(EaselDesignSystem.Palette.canvas(for: colorScheme))
-    .task(id: workspacePath) {
-      refreshFiles()
-    }
-    .onChange(of: question?.id) { _, _ in
-      // A freshly presented question re-opens the statement.
-      isProblemExpanded = true
-    }
   }
 
-  /// The problem lives with the editor: collapsible statement above the code,
-  /// so solving never requires flipping tabs.
-  private func problemHeader(_ question: Question) -> some View {
-    VStack(alignment: .leading, spacing: 6) {
-      Button {
-        withAnimation(.easeInOut(duration: 0.18)) {
-          isProblemExpanded.toggle()
-        }
-      } label: {
-        HStack(spacing: 8) {
-          Image(systemName: "chevron.right")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
-            .rotationEffect(.degrees(isProblemExpanded ? 90 : 0))
+  // MARK: - Top bar
 
-          Text(question.title)
-            .font(EaselDesignSystem.Typography.interface(size: 14, weight: .semibold))
-            .lineLimit(1)
-
-          difficultyChip(question.difficulty)
-
-          Spacer()
-
-          Text("Write your solution below — ⌘S saves; graded on End & Grade")
-            .font(.caption2)
-            .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
-            .lineLimit(1)
-        }
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-
-      if isProblemExpanded {
-        ScrollView {
-          Text(promptText(question))
-            .font(.system(size: 13))
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(maxHeight: 180)
-      }
-    }
-    .padding(.horizontal, 14)
-    .padding(.vertical, 10)
-    .background(EaselDesignSystem.Palette.surface(for: colorScheme))
-  }
-
-  private func difficultyChip(_ difficulty: Difficulty) -> some View {
-    let color: Color
-    switch difficulty {
-    case .easy: color = .green
-    case .medium: color = .orange
-    case .hard: color = .red
-    }
-    return Text(difficulty.displayName)
-      .font(.system(size: 10, weight: .semibold))
-      .foregroundStyle(color)
-      .padding(.horizontal, 7)
-      .padding(.vertical, 2)
-      .background(Capsule().fill(color.opacity(0.15)))
-  }
-
-  private func promptText(_ question: Question) -> AttributedString {
-    (try? AttributedString(
-      markdown: question.promptMarkdown,
-      options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-    )) ?? AttributedString(question.promptMarkdown)
-  }
-
-  @ViewBuilder
-  private func content(workspacePath: String) -> some View {
-    if files.isEmpty {
-      ContentUnavailableView {
-        Label("Empty workspace", systemImage: "folder")
-      } description: {
-        Text("Create a solution file and write your code here. Save with ⌘S — Buddy grades these files when you End & Grade.")
-      } actions: {
-        Button("Create \(starterFileName)") {
-          createStarterFile(in: workspacePath)
-        }
-        .buttonStyle(.borderedProminent)
-
-        Button("Refresh") {
-          refreshFiles()
-        }
-      }
-    } else {
-      HStack(spacing: 0) {
-        fileList
-
-        Rectangle()
-          .fill(EaselDesignSystem.Palette.border(for: colorScheme))
-          .frame(width: 1)
-
-        editorPane
-      }
-    }
-  }
-
-  private var fileList: some View {
-    VStack(alignment: .leading, spacing: 2) {
-      HStack {
-        Text("Files")
-          .font(.system(size: 11, weight: .semibold))
-          .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
-
-        Spacer()
-
-        Button {
-          refreshFiles()
-        } label: {
-          Image(systemName: "arrow.clockwise")
-            .font(.system(size: 10, weight: .medium))
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
-        .help("Refresh files")
-      }
-      .padding(.horizontal, 10)
-      .padding(.vertical, 8)
-
-      ScrollView {
-        LazyVStack(alignment: .leading, spacing: 1) {
+  private var workspaceBar: some View {
+    HStack(spacing: 8) {
+      if files.count > 1 {
+        Menu {
           ForEach(files) { file in
-            fileRow(file)
+            Button(file.relativePath) {
+              select(file)
+            }
+          }
+        } label: {
+          HStack(spacing: 4) {
+            Image(systemName: "doc")
+              .font(.system(size: 10))
+            Text(selectedFile?.relativePath ?? "Select file")
+              .font(.system(size: 12, design: .monospaced))
+              .lineLimit(1)
+              .truncationMode(.middle)
+            Image(systemName: "chevron.up.chevron.down")
+              .font(.system(size: 8, weight: .semibold))
           }
         }
-        .padding(.horizontal, 6)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+        .fixedSize()
+      } else if let selectedFile {
+        HStack(spacing: 4) {
+          Image(systemName: "doc")
+            .font(.system(size: 10))
+          Text(selectedFile.fileName)
+            .font(.system(size: 12, design: .monospaced))
+        }
+        .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
       }
 
-      Spacer(minLength: 0)
-    }
-    .frame(width: 180)
-    .background(EaselDesignSystem.Palette.surface(for: colorScheme))
-  }
+      Spacer()
 
-  private func fileRow(_ file: WorkspaceFile) -> some View {
-    let isSelected = selectedFile == file
-    return Button {
-      select(file)
-    } label: {
-      HStack(spacing: 5) {
-        Image(systemName: "doc")
-          .font(.system(size: 10))
-          .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
-
-        Text(file.relativePath)
-          .font(.system(size: 12, design: .monospaced))
-          .foregroundStyle(isSelected ? Color.primary : EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+      if let loadError {
+        Text(loadError)
+          .font(.caption2)
+          .foregroundStyle(EaselDesignSystem.Palette.danger)
           .lineLimit(1)
-          .truncationMode(.middle)
+      } else {
+        Text("⌘S saves · graded on End & Grade")
+          .font(.caption2)
+          .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
       }
-      .padding(.horizontal, 7)
-      .padding(.vertical, 4)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .background(
-        isSelected ? EaselDesignSystem.Palette.selectedSurface(for: colorScheme) : Color.clear,
-        in: RoundedRectangle(cornerRadius: EaselDesignSystem.Radius.control)
-      )
-      .contentShape(Rectangle())
+
+      Button {
+        if let workspacePath {
+          prepareWorkspace(workspacePath)
+        }
+      } label: {
+        Image(systemName: "arrow.clockwise")
+          .font(.system(size: 10, weight: .medium))
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+      .help("Reload files from disk")
     }
-    .buttonStyle(.plain)
+    .padding(.horizontal, 14)
+    .frame(height: 30)
+    .background(EaselDesignSystem.Palette.surface(for: colorScheme))
   }
 
   @ViewBuilder
@@ -247,21 +149,52 @@ public struct WorkspaceEditorView: View {
       .id(selectedFile.id)
     } else {
       ContentUnavailableView {
-        Label("Select a file", systemImage: "doc.text")
+        Label("Preparing workspace…", systemImage: "doc.text")
       } description: {
-        Text(loadError ?? "Pick a file from the list to edit it.")
+        Text(loadError ?? "Your solution file opens here automatically.")
       }
     }
   }
 
-  // MARK: - File operations
+  // MARK: - Workspace preparation
 
-  private func refreshFiles() {
-    guard let workspacePath else {
-      files = []
-      return
+  /// Ensures a solution file exists (seeded with the problem statement as a
+  /// comment header when the question is known), then opens it.
+  private func prepareWorkspace(_ workspacePath: String) {
+    refreshFiles(workspacePath)
+
+    let rootURL = URL(fileURLWithPath: workspacePath, isDirectory: true)
+    let starterURL = rootURL.appendingPathComponent(starterFileName)
+    var didSeed = false
+
+    if files.isEmpty {
+      let seed = question.map(seededContent(for:)) ?? ""
+      try? seed.write(to: starterURL, atomically: true, encoding: .utf8)
+      refreshFiles(workspacePath)
+      didSeed = true
+    } else if let question,
+              let starter = files.first(where: { $0.url == starterURL }),
+              let existing = try? String(contentsOf: starter.url, encoding: .utf8),
+              existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              fileContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      // Question arrived after the file was created and it's still untouched
+      // on disk AND in the visible buffer: seed it now. Never overwrite
+      // anything the candidate typed.
+      try? seededContent(for: question).write(to: starter.url, atomically: true, encoding: .utf8)
+      didSeed = true
     }
 
+    // Prefer the solution file; fall back to the first file. Only reload an
+    // existing selection when we just seeded it — never over unsaved edits.
+    let preferred = files.first { $0.url == starterURL } ?? files.first
+    if let preferred, selectedFile == nil || !files.contains(where: { $0 == selectedFile }) {
+      select(preferred)
+    } else if didSeed, let selectedFile, selectedFile.url == starterURL {
+      select(selectedFile)
+    }
+  }
+
+  private func refreshFiles(_ workspacePath: String) {
     let rootURL = URL(fileURLWithPath: workspacePath, isDirectory: true)
     var found: [WorkspaceFile] = []
     if let enumerator = FileManager.default.enumerator(
@@ -280,14 +213,6 @@ public struct WorkspaceEditorView: View {
       }
     }
     files = found.sorted { $0.relativePath < $1.relativePath }
-
-    if let selectedFile, !files.contains(selectedFile) {
-      self.selectedFile = nil
-      fileContent = ""
-    }
-    if selectedFile == nil, let first = files.first {
-      select(first)
-    }
   }
 
   private func select(_ file: WorkspaceFile) {
@@ -296,7 +221,7 @@ public struct WorkspaceEditorView: View {
       selectedFile = file
       loadError = nil
     } catch {
-      loadError = "Could not read \(file.fileName): \(error.localizedDescription)"
+      loadError = "Could not read \(file.fileName)"
       selectedFile = nil
       fileContent = ""
     }
@@ -308,34 +233,78 @@ public struct WorkspaceEditorView: View {
     do {
       try text.write(to: file.url, atomically: true, encoding: .utf8)
       fileContent = text
+      loadError = nil
     } catch {
-      loadError = "Could not save \(file.fileName): \(error.localizedDescription)"
+      loadError = "Could not save \(file.fileName)"
     }
   }
 
-  private var starterFileName: String {
-    switch languageHint?.lowercased() {
-    case "python": return "solution.py"
-    case "typescript": return "solution.ts"
-    case "javascript": return "solution.js"
-    case "kotlin": return "Solution.kt"
-    case "java": return "Solution.java"
-    case "c++", "cpp": return "solution.cpp"
-    case "go": return "solution.go"
-    case "rust": return "solution.rs"
-    default: return "solution.swift"
+  // MARK: - Starter file seeding
+
+  private var languageProfile: (fileName: String, comment: String) {
+    switch question?.languageHint?.lowercased() {
+    case "python": return ("solution.py", "#")
+    case "ruby": return ("solution.rb", "#")
+    case "typescript": return ("solution.ts", "//")
+    case "javascript": return ("solution.js", "//")
+    case "kotlin": return ("Solution.kt", "//")
+    case "java": return ("Solution.java", "//")
+    case "c++", "cpp": return ("solution.cpp", "//")
+    case "c": return ("solution.c", "//")
+    case "go": return ("solution.go", "//")
+    case "rust": return ("solution.rs", "//")
+    default: return ("solution.swift", "//")
     }
   }
 
-  private func createStarterFile(in workspacePath: String) {
-    let url = URL(fileURLWithPath: workspacePath, isDirectory: true)
-      .appendingPathComponent(starterFileName)
-    if !FileManager.default.fileExists(atPath: url.path) {
-      try? "".write(to: url, atomically: true, encoding: .utf8)
+  private var starterFileName: String { languageProfile.fileName }
+
+  /// The problem statement as a comment header, so reading and solving happen
+  /// in the same buffer.
+  private func seededContent(for question: Question) -> String {
+    let comment = languageProfile.comment
+    var lines: [String] = []
+
+    var heading = "\(question.title) — \(question.difficulty.displayName)"
+    if !question.topicIds.isEmpty {
+      heading += " (\(question.topicIds.joined(separator: ", ")))"
     }
-    refreshFiles()
-    if let created = files.first(where: { $0.fileName == starterFileName }) {
-      select(created)
+    lines.append("\(comment) \(heading)")
+    lines.append(comment)
+
+    for paragraph in question.promptMarkdown.components(separatedBy: "\n") {
+      for wrapped in wrap(paragraph, width: 88) {
+        lines.append(wrapped.isEmpty ? comment : "\(comment) \(wrapped)")
+      }
     }
+
+    lines.append(comment)
+    lines.append("\(comment) Write your solution below. ⌘S saves — graded on End & Grade.")
+    lines.append("")
+    lines.append("")
+
+    return lines.joined(separator: "\n")
+  }
+
+  private func wrap(_ text: String, width: Int) -> [String] {
+    let trimmed = text.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return [""] }
+
+    var lines: [String] = []
+    var current = ""
+    for word in trimmed.split(separator: " ") {
+      if current.isEmpty {
+        current = String(word)
+      } else if current.count + word.count + 1 <= width {
+        current += " \(word)"
+      } else {
+        lines.append(current)
+        current = String(word)
+      }
+    }
+    if !current.isEmpty {
+      lines.append(current)
+    }
+    return lines
   }
 }
