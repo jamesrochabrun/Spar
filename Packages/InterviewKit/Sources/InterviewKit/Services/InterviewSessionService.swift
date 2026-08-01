@@ -14,6 +14,7 @@ public final class InterviewSessionService {
   public private(set) var activeAttempt: InterviewAttempt?
   public private(set) var activeQuestion: Question?
   public private(set) var latestEvaluation: RubricEvaluation?
+  public private(set) var latestNotes: [ImprovementNote] = []
 
   /// Fires when an evaluation is persisted so the UI can switch to the report.
   public var onEvaluationCompleted: ((RubricEvaluation) -> Void)?
@@ -57,6 +58,7 @@ public final class InterviewSessionService {
     activeAttempt = attempt
     activeQuestion = question
     latestEvaluation = nil
+    latestNotes = []
     return attempt
   }
 
@@ -102,6 +104,7 @@ public final class InterviewSessionService {
     }
     activeAttempt = attempt
     latestEvaluation = evaluation
+    latestNotes = notes
     try? await storage.updateAttempt(attempt)
     onEvaluationCompleted?(evaluation)
   }
@@ -114,6 +117,7 @@ public final class InterviewSessionService {
     activeAttempt = nil
     activeQuestion = nil
     latestEvaluation = nil
+    latestNotes = []
   }
 
   // MARK: - Restore
@@ -125,6 +129,7 @@ public final class InterviewSessionService {
       activeAttempt = nil
       activeQuestion = nil
       latestEvaluation = nil
+      latestNotes = []
       return nil
     }
 
@@ -135,6 +140,7 @@ public final class InterviewSessionService {
       activeQuestion = nil
     }
     latestEvaluation = try? await storage.evaluation(forAttemptId: attempt.id)
+    latestNotes = (try? await storage.notes(forAttemptId: attempt.id)) ?? []
     return attempt
   }
 
@@ -142,6 +148,7 @@ public final class InterviewSessionService {
     activeAttempt = nil
     activeQuestion = nil
     latestEvaluation = nil
+    latestNotes = []
   }
 
   // MARK: - Derived

@@ -18,6 +18,7 @@ public protocol InterviewStorageProtocol: Sendable {
   func saveEvaluation(_ e: RubricEvaluation, notes: [ImprovementNote]) async throws
   func evaluation(forAttemptId: String) async throws -> RubricEvaluation?
   func openImprovementNotes() async throws -> [ImprovementNote]
+  func notes(forAttemptId: String) async throws -> [ImprovementNote]
   func setNoteResolved(id: String, resolved: Bool) async throws
   func allTopics() async throws -> [Topic]
   func topicSkillStats() async throws -> [TopicSkillStat]

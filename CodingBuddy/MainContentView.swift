@@ -19,6 +19,7 @@ struct MainContentView: View {
   @State private var didHandleInitialPrompt = false
   @State private var sheetTopics: [Topic] = []
   @State private var sheetBankQuestions: [Question] = []
+  @State private var selectedSurface: StudioSurface = .problem
   @Environment(\.colorScheme) private var colorScheme
 
   private let chatPanelWidth: CGFloat = 380
@@ -100,11 +101,15 @@ struct MainContentView: View {
         }
       }
       vm.onStartSession = { request in
+        selectedSurface = StudioSurface.defaultSurface(for: request.mode)
         Task {
           await chatService.initialize()
           await chatService.startNewSession(request)
           await vm.loadSessions()
         }
+      }
+      chatService.onEvaluationRecorded = { _ in
+        selectedSurface = .report
       }
       vm.onDeleteSession = { session in
         Task {
@@ -215,8 +220,10 @@ struct MainContentView: View {
     sidebarViewModel?.isSidebarVisible = shouldShowSidebar
   }
 
-  // Placeholder right panel. Interview surfaces (problem, workspace,
-  // whiteboard, report) land here in WP6/WP7.
+  private var availableSurfaces: [StudioSurface] {
+    StudioSurface.available(for: chatService.currentMode)
+  }
+
   private var studioSurfacePanel: some View {
     VStack(spacing: 0) {
       studioSurfaceTopBar
@@ -225,20 +232,95 @@ struct MainContentView: View {
         .fill(.quaternary)
         .frame(height: 1)
 
-      ContentUnavailableView {
-        Label("CodingBuddy", systemImage: "graduationcap")
-      } description: {
-        Text("Start a session to begin practicing.")
+      // Same ZStack + opacity/hit-testing switching as Easel's canvas panel:
+      // surfaces stay alive (editor buffers, whiteboard web view) while hidden.
+      ZStack {
+        ProblemStatementView(
+          question: chatService.interviewSession.activeQuestion,
+          attempt: chatService.interviewSession.activeAttempt
+        )
+        .opacity(selectedSurface == .problem ? 1 : 0)
+        .allowsHitTesting(selectedSurface == .problem)
+        .accessibilityHidden(selectedSurface != .problem)
+
+        if availableSurfaces.contains(.workspace) {
+          WorkspaceEditorView(
+            workspacePath: chatService.interviewSession.activeAttempt?.workspacePath,
+            languageHint: chatService.interviewSession.activeQuestion?.languageHint
+          )
+          .opacity(selectedSurface == .workspace ? 1 : 0)
+          .allowsHitTesting(selectedSurface == .workspace)
+          .accessibilityHidden(selectedSurface != .workspace)
+        }
+
+        if availableSurfaces.contains(.whiteboard) {
+          whiteboardPlaceholder
+            .opacity(selectedSurface == .whiteboard ? 1 : 0)
+            .allowsHitTesting(selectedSurface == .whiteboard)
+            .accessibilityHidden(selectedSurface != .whiteboard)
+        }
+
+        SessionReportView(
+          evaluation: chatService.interviewSession.latestEvaluation,
+          notes: chatService.interviewSession.latestNotes,
+          attempt: chatService.interviewSession.activeAttempt
+        )
+        .opacity(selectedSurface == .report ? 1 : 0)
+        .allowsHitTesting(selectedSurface == .report)
+        .accessibilityHidden(selectedSurface != .report)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(EaselDesignSystem.Palette.canvas(for: colorScheme))
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .onChange(of: chatService.currentMode) { _, newMode in
+      if !StudioSurface.available(for: newMode).contains(selectedSurface) {
+        selectedSurface = StudioSurface.defaultSurface(for: newMode)
+      }
+    }
+    .onChange(of: chatService.currentSessionId) { _, _ in
+      selectedSurface = StudioSurface.defaultSurface(for: chatService.currentMode)
+      // Restored sessions with a report jump straight to it.
+      if chatService.interviewSession.latestEvaluation != nil {
+        selectedSurface = .report
+      }
+    }
+  }
+
+  private var whiteboardPlaceholder: some View {
+    ContentUnavailableView {
+      Label("Whiteboard", systemImage: "rectangle.3.group")
+    } description: {
+      Text("The excalidraw whiteboard arrives with MCP Apps support.")
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(EaselDesignSystem.Palette.canvas(for: colorScheme))
   }
 
   private var studioSurfaceTopBar: some View {
     HStack(spacing: 12) {
+      Picker("Surface", selection: $selectedSurface) {
+        ForEach(availableSurfaces) { surface in
+          Label(surface.displayName, systemImage: surface.systemImage)
+            .tag(surface)
+        }
+      }
+      .pickerStyle(.segmented)
+      .labelsHidden()
+      .frame(width: CGFloat(availableSurfaces.count) * 92)
+
       Spacer()
+
+      if let mode = chatService.currentMode,
+         chatService.interviewSession.activeAttempt?.status == .inProgress {
+        TimerPillView(
+          timer: chatService.sessionTimer,
+          mode: mode,
+          onEndAndGrade: {
+            selectedSurface = .report
+            Task { await chatService.endAndGrade() }
+          }
+        )
+      }
 
       #if DEBUG
         if chatService.currentWorkingDirectory != nil {

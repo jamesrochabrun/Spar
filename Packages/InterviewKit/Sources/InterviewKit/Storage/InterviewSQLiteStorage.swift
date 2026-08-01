@@ -475,6 +475,31 @@ public actor InterviewSQLiteStorage: InterviewStorageProtocol {
     return results
   }
 
+  public func notes(forAttemptId attemptId: String) async throws -> [ImprovementNote] {
+    try initializeDatabaseIfNeeded()
+    let sql = """
+      SELECT id, attempt_id, topic_id, created_at, note_markdown, is_resolved
+      FROM improvement_notes WHERE attempt_id = ? ORDER BY created_at ASC
+      """
+    var results: [ImprovementNote] = []
+    for row in try database.prepare(sql, [attemptId]) {
+      guard
+        let id = row[0] as? String,
+        let createdAt = row[3] as? Double,
+        let noteMarkdown = row[4] as? String
+      else { continue }
+      results.append(ImprovementNote(
+        id: id,
+        attemptId: row[1] as? String,
+        topicId: row[2] as? String,
+        createdAt: Date(timeIntervalSince1970: createdAt),
+        noteMarkdown: noteMarkdown,
+        isResolved: (row[5] as? Int64 ?? 0) == 1
+      ))
+    }
+    return results
+  }
+
   public func setNoteResolved(id: String, resolved: Bool) async throws {
     try initializeDatabaseIfNeeded()
     try database.run(
