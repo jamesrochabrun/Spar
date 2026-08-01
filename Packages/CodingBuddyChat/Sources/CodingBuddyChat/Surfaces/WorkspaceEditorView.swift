@@ -16,17 +16,29 @@ import SwiftUI
 public struct WorkspaceEditorView: View {
   private let workspacePath: String?
   private let question: Question?
+  private let codeRunner: any CodeRunning
 
   @State private var files: [WorkspaceFile] = []
   @State private var selectedFile: WorkspaceFile?
   @State private var fileContent: String = ""
   @State private var isSaving = false
   @State private var loadError: String?
+  @State private var isRunning = false
+  @State private var runResult: CodeRunResult?
+  @State private var runErrorMessage: String?
+  @State private var isConsoleVisible = false
+  @State private var runTask: Task<Void, Never>?
+  @State private var runGeneration = 0
   @Environment(\.colorScheme) private var colorScheme
 
-  public init(workspacePath: String?, question: Question?) {
+  public init(
+    workspacePath: String?,
+    question: Question?,
+    codeRunner: any CodeRunning = ProcessCodeRunner()
+  ) {
     self.workspacePath = workspacePath
     self.question = question
+    self.codeRunner = codeRunner
   }
 
   struct WorkspaceFile: Identifiable, Equatable {
@@ -113,7 +125,8 @@ public struct WorkspaceEditorView: View {
           .foregroundStyle(EaselDesignSystem.Palette.danger)
           .lineLimit(1)
       } else {
-        Text("⌘S saves · graded on End & Grade")
+        let runHint = selectedFile.map(canRun) == true ? "⌘R runs · " : ""
+        Text("⌘S saves · \(runHint)graded on End & Grade")
           .font(.caption2)
           .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
       }
@@ -138,21 +151,83 @@ public struct WorkspaceEditorView: View {
   @ViewBuilder
   private var editorPane: some View {
     if let selectedFile {
-      ProjectResourceTextPreview(
-        fileName: selectedFile.fileName,
-        text: fileContent,
-        isSaving: isSaving,
-        onSave: { newText in
-          save(newText, to: selectedFile)
+      VStack(spacing: 0) {
+        ProjectResourceTextPreview(
+          fileName: selectedFile.fileName,
+          text: fileContent,
+          isSaving: isSaving,
+          onSave: { newText in
+            save(newText, to: selectedFile)
+          },
+          isRunning: isRunning,
+          onRun: canRun(selectedFile) ? { latestText in
+            saveAndRun(latestText, file: selectedFile)
+          } : nil
+        )
+        .id(selectedFile.id)
+
+        if isConsoleVisible {
+          Rectangle()
+            .fill(EaselDesignSystem.Palette.border(for: colorScheme))
+            .frame(height: 1)
+
+          WorkspaceConsoleView(
+            isRunning: isRunning,
+            result: runResult,
+            errorMessage: runErrorMessage,
+            onStop: { runTask?.cancel() },
+            onClose: {
+              runTask?.cancel()
+              isConsoleVisible = false
+            }
+          )
+          .frame(height: 180)
         }
-      )
-      .id(selectedFile.id)
+      }
     } else {
       ContentUnavailableView {
         Label("Preparing workspace…", systemImage: "doc.text")
       } description: {
         Text(loadError ?? "Your solution file opens here automatically.")
       }
+    }
+  }
+
+  // MARK: - Run
+
+  private func canRun(_ file: WorkspaceFile) -> Bool {
+    codeRunner.language(forFileExtension: file.url.pathExtension) != nil
+  }
+
+  /// Saves the buffer, then compiles and runs the file, streaming the outcome
+  /// into the console pane.
+  private func saveAndRun(_ latestText: String, file: WorkspaceFile) {
+    save(latestText, to: file)
+    guard loadError == nil else { return }
+
+    runTask?.cancel()
+    isConsoleVisible = true
+    isRunning = true
+    runResult = nil
+    runErrorMessage = nil
+    runGeneration += 1
+    let generation = runGeneration
+
+    runTask = Task {
+      var result: CodeRunResult?
+      var message: String?
+      do {
+        result = try await codeRunner.run(fileURL: file.url)
+      } catch is CancellationError {
+        message = WorkspaceConsoleView.stoppedMessage
+      } catch {
+        message = error.localizedDescription
+      }
+      // A newer run may have superseded this one while it was in flight.
+      guard generation == runGeneration else { return }
+      runResult = result
+      runErrorMessage = message
+      isRunning = false
     }
   }
 
@@ -279,7 +354,11 @@ public struct WorkspaceEditorView: View {
     }
 
     lines.append(comment)
-    lines.append("\(comment) Write your solution below. ⌘S saves — graded on End & Grade.")
+    let runnable = CodeRunLanguage.detect(
+      fileExtension: URL(fileURLWithPath: starterFileName).pathExtension
+    ) != nil
+    let runHint = runnable ? " ⌘R compiles and runs it." : ""
+    lines.append("\(comment) Write your solution below. ⌘S saves — graded on End & Grade.\(runHint)")
     lines.append("")
     lines.append("")
 

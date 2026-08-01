@@ -10,17 +10,24 @@ struct ProjectResourceTextPreview: View {
   let text: String
   let isSaving: Bool
   let onSave: (String) -> Void
+  let isRunning: Bool
+  /// When set, a Run button appears that saves and runs the current buffer.
+  let onRun: ((String) -> Void)?
 
   init(
     fileName: String,
     text: String,
     isSaving: Bool,
-    onSave: @escaping (String) -> Void
+    onSave: @escaping (String) -> Void,
+    isRunning: Bool = false,
+    onRun: ((String) -> Void)? = nil
   ) {
     self.fileName = fileName
     self.text = text
     self.isSaving = isSaving
     self.onSave = onSave
+    self.isRunning = isRunning
+    self.onRun = onRun
     self._editorText = State(initialValue: text)
     self._savedText = State(initialValue: text)
     self._displayMode = State(initialValue: .displayMode(for: text))
@@ -102,6 +109,17 @@ struct ProjectResourceTextPreview: View {
         .buttonStyle(.borderedProminent)
         .controlSize(.small)
         .disabled(isSaving)
+      }
+
+      if let onRun {
+        Button("Run", systemImage: "play.fill") {
+          onRun(editorText)
+        }
+        .keyboardShortcut("r", modifiers: .command)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(isRunning || isSaving)
+        .help("Save and run this file (⌘R)")
       }
     }
     .frame(height: 32)
