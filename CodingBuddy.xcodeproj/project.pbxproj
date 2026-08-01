@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		BB0000012FA0000700000007 /* ApprovalServerKit in Frameworks */ = {isa = PBXBuildFile; productRef = BB0000012FA0000800000008 /* ApprovalServerKit */; };
 		CC0000010000000100000001 /* CodingBuddyKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000010000000200000002 /* CodingBuddyKit */; };
+		CC0000020000000100000001 /* InterviewKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000020000000200000002 /* InterviewKit */; };
 		CC0000010000000300000003 /* CodingBuddyChat in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000010000000400000004 /* CodingBuddyChat */; };
 		FA0000010000000100000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000010000000200000002 /* Sparkle */; };
 /* End PBXBuildFile section */
@@ -60,6 +61,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CC0000010000000100000001 /* CodingBuddyKit in Frameworks */,
+				CC0000020000000100000001 /* InterviewKit in Frameworks */,
 				CC0000010000000300000003 /* CodingBuddyChat in Frameworks */,
 				BB0000012FA0000700000007 /* ApprovalServerKit in Frameworks */,
 				FA0000010000000100000001 /* Sparkle in Frameworks */,
@@ -125,6 +127,7 @@
 			name = CodingBuddy;
 			packageProductDependencies = (
 				CC0000010000000200000002 /* CodingBuddyKit */,
+				CC0000020000000200000002 /* InterviewKit */,
 				CC0000010000000400000004 /* CodingBuddyChat */,
 				BB0000012FA0000800000008 /* ApprovalServerKit */,
 				FA0000010000000200000002 /* Sparkle */,
@@ -213,6 +216,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				CC0000010000000700000007 /* XCLocalSwiftPackageReference "Packages/CodingBuddyKit" */,
+				CC0000020000000700000007 /* XCLocalSwiftPackageReference "Packages/InterviewKit" */,
 				CC0000010000000800000008 /* XCLocalSwiftPackageReference "Packages/CodingBuddyChat" */,
 				BB0000012FA0000A0000000A /* XCRemoteSwiftPackageReference "ClaudeCodeApprovalServer" */,
 				FA0000010000000300000003 /* XCRemoteSwiftPackageReference "Sparkle" */,
@@ -615,6 +619,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/CodingBuddyKit;
 		};
+		CC0000020000000700000007 /* XCLocalSwiftPackageReference "Packages/InterviewKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/InterviewKit;
+		};
 		CC0000010000000800000008 /* XCLocalSwiftPackageReference "Packages/CodingBuddyChat" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/CodingBuddyChat;
@@ -649,6 +657,10 @@
 		CC0000010000000200000002 /* CodingBuddyKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = CodingBuddyKit;
+		};
+		CC0000020000000200000002 /* InterviewKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = InterviewKit;
 		};
 		CC0000010000000400000004 /* CodingBuddyChat */ = {
 			isa = XCSwiftPackageProductDependency;

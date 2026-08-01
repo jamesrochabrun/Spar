@@ -11,17 +11,19 @@ import ClaudeCodeCore
 import ClaudeCodeSDK
 import CodingBuddyKit
 import Foundation
+import InterviewKit
 import OSLog
 
 private let chatLog = Logger(subsystem: "com.codingbuddy.chat", category: "ChatService")
 
-private struct ChatSessionContext {
+struct ChatSessionContext {
   let viewModel: ChatViewModel
   let deps: DependencyContainer
   let reference: ChatViewModelReference
+  let mode: SessionMode
 }
 
-private enum ChatServiceError: LocalizedError {
+enum ChatServiceError: LocalizedError {
   case missingGlobalPreferences
 
   var errorDescription: String? {
@@ -32,7 +34,7 @@ private enum ChatServiceError: LocalizedError {
   }
 }
 
-private final class ChatViewModelReference {
+final class ChatViewModelReference {
   weak var viewModel: ChatViewModel?
 }
 
@@ -51,6 +53,17 @@ public final class ChatService: ChatServiceProtocol {
   public private(set) var currentWorkspaceUsageSummary: SessionUsageSummary = .zero
   public private(set) var sessionStorage: SessionStorageProtocol
   public var mcpToolsDiscoveryService: MCPToolsDiscoveryService { mcpToolsDiscovery }
+
+  // MARK: - Interview services
+
+  public let interviewStorage: any InterviewStorageProtocol
+  public let interviewSession: InterviewSessionService
+  public let questionBank: QuestionBankService
+  public let skillStats: SkillStatsService
+  public let sessionTimer = SessionTimer()
+
+  /// Mode of the currently visible session, driving surface availability.
+  public var currentMode: SessionMode? { activeSessionContext?.mode }
 
   /// On-device MLX model management, shared by the chat runtime and the
   /// settings download UI. One instance app-wide — the loaded model is the
@@ -83,6 +96,8 @@ public final class ChatService: ChatServiceProtocol {
 
   /// Called when a session changes (created or switched), so the sidebar can refresh
   public var onSessionChanged: (() -> Void)?
+  /// Called when an evaluation lands so the UI can auto-switch to the report surface.
+  public var onEvaluationRecorded: ((RubricEvaluation) -> Void)?
 
   private var isInitializing = false
   private let persistentPreferencesManager: PersistentPreferencesManager
@@ -93,19 +108,42 @@ public final class ChatService: ChatServiceProtocol {
   private var pendingSessionContextsByViewModelId: [ObjectIdentifier: ChatSessionContext] = [:]
   private var sessionIdByViewModelId: [ObjectIdentifier: String] = [:]
   private var activeSessionContext: ChatSessionContext?
+  private var capturedAssistantMessageIds: Set<UUID> = []
+  private var evaluationRepairAttempts = 0
+  private let maxEvaluationRepairAttempts = 2
 
   // MARK: - Init
 
   public init(
     sessionStorage: SessionStorageProtocol = SimplifiedClaudeCodeSQLiteStorage(),
+    interviewStorage: (any InterviewStorageProtocol)? = nil,
+    workspaceManager: (any InterviewWorkspaceManaging)? = nil,
     persistentPreferencesManager: PersistentPreferencesManager? = nil,
     mcpToolsDiscovery: MCPToolsDiscoveryService = MCPToolsDiscoveryService(),
     logger: ClaudeCodeLogger = ClaudeCodeLogger()
   ) {
+    let resolvedInterviewStorage = interviewStorage ?? InterviewSQLiteStorage()
     self.sessionStorage = sessionStorage
+    self.interviewStorage = resolvedInterviewStorage
+    self.interviewSession = InterviewSessionService(
+      storage: resolvedInterviewStorage,
+      workspaceManager: workspaceManager ?? InterviewWorkspaceManager()
+    )
+    self.questionBank = QuestionBankService(storage: resolvedInterviewStorage)
+    self.skillStats = SkillStatsService(storage: resolvedInterviewStorage)
     self.mcpToolsDiscovery = mcpToolsDiscovery
     self.logger = logger
     self.persistentPreferencesManager = persistentPreferencesManager ?? PersistentPreferencesManager(logger: logger)
+
+    sessionTimer.onExpiry = { [weak self] in
+      Task { @MainActor [weak self] in
+        await self?.handleTimerExpired()
+      }
+    }
+    interviewSession.onEvaluationCompleted = { [weak self] evaluation in
+      self?.sessionTimer.stop()
+      self?.onEvaluationRecorded?(evaluation)
+    }
   }
 
   // MARK: - Initialization
@@ -127,7 +165,7 @@ public final class ChatService: ChatServiceProtocol {
         persistentManager: persistentPreferencesManager,
         logger: logger
       )
-      let context = try makeSessionContext(globalPreferences: globalPrefs)
+      let context = try makeSessionContext(mode: .practice, globalPreferences: globalPrefs)
 
       setCurrentWorkingDirectory(context.viewModel.projectPath)
 
@@ -157,19 +195,153 @@ public final class ChatService: ChatServiceProtocol {
     sendMessageToViewModel(text, context: context, hiddenContext: hiddenContext)
   }
 
+  // MARK: - Interview session lifecycle
+
+  public struct NewSessionRequest {
+    public var mode: SessionMode
+    public var question: Question?
+    public var durationSeconds: Int?
+    public var hintBudget: Int
+
+    public init(
+      mode: SessionMode,
+      question: Question? = nil,
+      durationSeconds: Int? = nil,
+      hintBudget: Int = 3
+    ) {
+      self.mode = mode
+      self.question = question
+      self.durationSeconds = durationSeconds
+      self.hintBudget = hintBudget
+    }
+  }
+
+  /// Starts a new interview session: creates the attempt (with workspace),
+  /// builds a chat context with mode-specific prompts, starts the timer.
+  public func startNewSession(_ request: NewSessionRequest) async {
+    let initialized = await ensureInitialized()
+    guard initialized else { return }
+
+    await persistVisibleSessionMessages()
+    retainCurrentSessionContext()
+
+    let provider = globalPreferences?.chatProvider.rawValue ?? "claude"
+    let attempt: InterviewAttempt
+    do {
+      attempt = try await interviewSession.beginAttempt(
+        mode: request.mode,
+        question: request.question,
+        durationSeconds: request.durationSeconds,
+        hintBudget: request.hintBudget,
+        provider: provider
+      )
+    } catch {
+      initError = error
+      return
+    }
+
+    let context: ChatSessionContext
+    do {
+      context = try makeSessionContext(mode: request.mode, workingDirectory: attempt.workspacePath)
+    } catch {
+      initError = error
+      return
+    }
+
+    activateContext(context)
+    pendingSessionContextsByViewModelId[ObjectIdentifier(context.viewModel)] = context
+
+    setCurrentWorkingDirectory(attempt.workspacePath ?? context.viewModel.projectPath)
+    setCurrentSessionId(nil)
+    refreshCurrentWorkspaceUsage()
+    evaluationRepairAttempts = 0
+
+    if let duration = request.durationSeconds {
+      sessionTimer.start(duration: TimeInterval(duration))
+    } else {
+      sessionTimer.stop()
+    }
+
+    // Kick off the interview: the agent presents the question (retry from
+    // bank) or generates one for the requested topics.
+    if request.mode != .practice {
+      sendKickoffMessage(for: request)
+    }
+  }
+
+  /// Legacy entry point (pre-interview flows): starts an untimed practice session.
+  public func startNewSession(workingDirectory: String?) async {
+    let initialized = await ensureInitialized()
+    guard initialized else { return }
+
+    await persistVisibleSessionMessages()
+    retainCurrentSessionContext()
+
+    let context: ChatSessionContext
+    do {
+      context = try makeSessionContext(mode: .practice, workingDirectory: workingDirectory)
+    } catch {
+      initError = error
+      return
+    }
+
+    activateContext(context)
+    pendingSessionContextsByViewModelId[ObjectIdentifier(context.viewModel)] = context
+    setCurrentWorkingDirectory(normalized(workingDirectory) ?? context.viewModel.projectPath)
+    setCurrentSessionId(nil)
+    refreshCurrentWorkspaceUsage()
+    interviewSession.clearActiveAttempt()
+    sessionTimer.stop()
+  }
+
+  private func sendKickoffMessage(for request: NewSessionRequest) {
+    let text: String
+    if let question = request.question {
+      text = """
+        Let's begin. Use this exact question from my bank (re-emit its \
+        buddy-question fence with the same title and prompt):
+
+        Title: \(question.title)
+        Difficulty: \(question.difficulty.rawValue)
+        Topics: \(question.topicIds.joined(separator: ", "))
+
+        \(question.promptMarkdown)
+        """
+    } else {
+      text = "Let's begin. Present my first question."
+    }
+    sendMessageToViewModel(text)
+  }
+
+  // MARK: - Hints / grading
+
+  /// Deterministic hint request: sends the canonical marker and increments the counter.
+  public func requestHint() {
+    guard let attempt = interviewSession.activeAttempt, attempt.status == .inProgress else { return }
+    Task { await interviewSession.recordHintUsed() }
+    sendMessageToViewModel(BuddyAgentInstructions.hintRequestMessage)
+  }
+
+  /// "End & grade": transitions the attempt and sends the evaluation directive.
+  public func endAndGrade() async {
+    guard let attempt = interviewSession.activeAttempt, attempt.status == .inProgress else { return }
+    sessionTimer.stop()
+    await interviewSession.requestEvaluation()
+    evaluationRepairAttempts = 0
+    sendMessageToViewModel(BuddyAgentInstructions.evaluationDirective(mode: attempt.mode))
+  }
+
+  private func handleTimerExpired() async {
+    await endAndGrade()
+  }
+
   // MARK: - Session Management
 
   public func switchToSession(_ session: StoredSession) async {
     let initialized = await ensureInitialized()
     guard initialized else { return }
 
-    // Save current session before switching
-    if let currentId = currentSessionId, let vm = chatViewModel {
-      let messages = vm.getCurrentMessages()
-      if !messages.isEmpty {
-        try? await sessionStorage.updateSessionMessages(id: currentId, messages: messages)
-      }
-    }
+    await persistVisibleSessionMessages()
     retainCurrentSessionContext()
 
     // Load fresh session data from storage, fall back to the passed object
@@ -180,12 +352,16 @@ public final class ChatService: ChatServiceProtocol {
       sessionToLoad = session
     }
 
+    // Restore the attempt (and its mode) linked to this chat session.
+    let restoredAttempt = await interviewSession.restoreAttempt(forChatSessionId: sessionToLoad.id)
+    let mode = restoredAttempt?.mode ?? .practice
+
     let context: ChatSessionContext
     if let existingContext = sessionContextsById[sessionToLoad.id] {
       context = existingContext
     } else {
       do {
-        context = try makeSessionContext(workingDirectory: sessionToLoad.workingDirectory)
+        context = try makeSessionContext(mode: mode, workingDirectory: sessionToLoad.workingDirectory)
       } catch {
         initError = error
         return
@@ -206,37 +382,22 @@ public final class ChatService: ChatServiceProtocol {
 
     setCurrentWorkingDirectory(normalized(context.viewModel.projectPath) ?? sessionToLoad.workingDirectory)
     setCurrentSessionId(sessionToLoad.id)
+    evaluationRepairAttempts = 0
+    restoreTimer(for: restoredAttempt)
   }
 
-  public func startNewSession(workingDirectory: String?) async {
-    let initialized = await ensureInitialized()
-    guard initialized else { return }
-
-    // Save current session before starting new one
-    if let currentId = currentSessionId, let vm = chatViewModel {
-      let messages = vm.getCurrentMessages()
-      if !messages.isEmpty {
-        try? await sessionStorage.updateSessionMessages(id: currentId, messages: messages)
-      }
-    }
-    retainCurrentSessionContext()
-
-    let context: ChatSessionContext
-    do {
-      context = try makeSessionContext(workingDirectory: workingDirectory)
-    } catch {
-      initError = error
+  /// Relaunch/switch mid-attempt: resumes the countdown from the persisted
+  /// deadline, or auto-expires if it already passed.
+  private func restoreTimer(for attempt: InterviewAttempt?) {
+    guard let attempt,
+          attempt.status == .inProgress,
+          let duration = attempt.plannedDurationSeconds else {
+      sessionTimer.stop()
       return
     }
 
-    activateContext(context)
-    pendingSessionContextsByViewModelId[ObjectIdentifier(context.viewModel)] = context
-
-    // Set the working directory for the new chat
-    setCurrentWorkingDirectory(normalized(workingDirectory) ?? context.viewModel.projectPath)
-
-    setCurrentSessionId(nil)
-    refreshCurrentWorkspaceUsage()
+    let deadline = attempt.startedAt.addingTimeInterval(TimeInterval(duration))
+    sessionTimer.start(deadline: deadline, totalDuration: TimeInterval(duration))
   }
 
   public func deleteSession(_ session: StoredSession) async {
@@ -255,6 +416,8 @@ public final class ChatService: ChatServiceProtocol {
       activeSessionContext = nil
       setCurrentSessionId(nil)
       chatViewModel?.clearConversation()
+      interviewSession.clearActiveAttempt()
+      sessionTimer.stop()
     }
     refreshCurrentWorkspaceUsage()
   }
@@ -273,6 +436,8 @@ public final class ChatService: ChatServiceProtocol {
     chatViewModel?.clearConversation()
     chatViewModel?.setWorkingDirectory("")
     setCurrentWorkingDirectory(nil)
+    interviewSession.clearActiveAttempt()
+    sessionTimer.stop()
   }
 
   // MARK: - Private
@@ -285,7 +450,17 @@ public final class ChatService: ChatServiceProtocol {
     return isInitialized
   }
 
+  private func persistVisibleSessionMessages() async {
+    if let currentId = currentSessionId, let vm = chatViewModel {
+      let messages = vm.getCurrentMessages()
+      if !messages.isEmpty {
+        try? await sessionStorage.updateSessionMessages(id: currentId, messages: messages)
+      }
+    }
+  }
+
   private func makeSessionContext(
+    mode: SessionMode,
     globalPreferences preferences: GlobalPreferencesStorage? = nil,
     workingDirectory: String? = nil
   ) throws -> ChatSessionContext {
@@ -310,6 +485,8 @@ public final class ChatService: ChatServiceProtocol {
       container.settingsStorage.setProjectPath(workingDirectory)
     }
 
+    let prefixes = BuddyAgentInstructions.prefixes(for: mode)
+
     let client = try ClaudeCodeClient(configuration: config)
     let reference = ChatViewModelReference()
     let viewModel = ChatViewModel(
@@ -320,9 +497,9 @@ public final class ChatService: ChatServiceProtocol {
       customPermissionService: container.customPermissionService,
       mcpToolsDiscovery: mcpToolsDiscovery,
       logger: logger,
-      systemPromptPrefix: EaselAgentInstructions.systemPromptPrefix,
-      codexDeveloperInstructionsPrefix: EaselAgentInstructions.codexDeveloperInstructionsPrefix,
-      apiInstructionsPrefix: EaselAgentInstructions.apiAgentInstructionsPrefix,
+      systemPromptPrefix: prefixes.claude,
+      codexDeveloperInstructionsPrefix: prefixes.codex,
+      apiInstructionsPrefix: prefixes.api,
       apiModelClientFactory: apiModelClientFactory,
       shouldManageSessions: true,
       onSessionChange: { [weak self, weak reference] newSessionId in
@@ -344,11 +521,57 @@ public final class ChatService: ChatServiceProtocol {
     reference.viewModel = viewModel
 
     viewModel.runtimeHiddenContextProvider = { [weak self, weak viewModel] in
-      self?.makeHiddenContext(for: viewModel, hiddenContext: nil)
+      self?.makeHiddenContext(for: viewModel)
+    }
+    viewModel.onAssistantTurnCompleted = { [weak self, weak viewModel] _, message in
+      guard let self, let viewModel, self.isVisibleViewModel(viewModel) else { return }
+      self.handleAssistantTurnCompleted(message, mode: mode)
     }
 
-    return ChatSessionContext(viewModel: viewModel, deps: container, reference: reference)
+    return ChatSessionContext(viewModel: viewModel, deps: container, reference: reference, mode: mode)
   }
+
+  // MARK: - Structured block capture
+
+  private func handleAssistantTurnCompleted(_ message: ChatMessage, mode: SessionMode) {
+    guard !capturedAssistantMessageIds.contains(message.id) else { return }
+    capturedAssistantMessageIds.insert(message.id)
+
+    let attempt = interviewSession.activeAttempt
+    let results = StructuredBlockCapture.capture(
+      messageText: message.content,
+      mode: mode,
+      attemptId: attempt?.id
+    )
+
+    var capturedEvaluation = false
+    Task { @MainActor in
+      for result in results {
+        switch result {
+        case .question(let captured):
+          await questionBank.save(captured.question)
+          if interviewSession.activeAttempt?.questionId == nil {
+            await interviewSession.attachQuestion(captured.question)
+          }
+        case .evaluation(let captured):
+          capturedEvaluation = true
+          await interviewSession.completeEvaluation(captured.evaluation, notes: captured.notes)
+          await skillStats.refresh()
+        }
+      }
+
+      // Repair loop: awaiting evaluation but no parseable buddy-eval fence.
+      if !capturedEvaluation,
+         let attempt = interviewSession.activeAttempt,
+         attempt.status == .awaitingEvaluation,
+         evaluationRepairAttempts < maxEvaluationRepairAttempts {
+        evaluationRepairAttempts += 1
+        sendMessageToViewModel(BuddyAgentInstructions.evaluationRepairDirective())
+      }
+    }
+  }
+
+  // MARK: - Context plumbing
 
   private func retainCurrentSessionContext() {
     guard let chatViewModel,
@@ -403,6 +626,9 @@ public final class ChatService: ChatServiceProtocol {
       return
     }
 
+    // Soft-link the chat session into the active attempt row.
+    Task { await interviewSession.linkChatSession(sessionId) }
+
     setCurrentSessionId(sessionId)
     setCurrentWorkingDirectory(viewModel.projectPath)
     refreshCurrentWorkspaceUsage()
@@ -420,15 +646,25 @@ public final class ChatService: ChatServiceProtocol {
     chatViewModel.sendMessage(text, context: context, hiddenContext: hiddenContext)
   }
 
-  private func makeHiddenContext(
-    for viewModel: ChatViewModel?,
-    hiddenContext: String?
-  ) -> String {
-    let workingDirectory = normalized(viewModel?.projectPath) ?? currentWorkingDirectory
+  private func makeHiddenContext(for viewModel: ChatViewModel?) -> String {
+    // Interview context only applies to the visible session's attempt.
+    guard isVisibleViewModel(viewModel), let attempt = interviewSession.activeAttempt else {
+      let workingDirectory = normalized(viewModel?.projectPath) ?? currentWorkingDirectory
+      if let workingDirectory {
+        return "Workspace directory: \(workingDirectory)"
+      }
+      return ""
+    }
 
-    return EaselAgentInstructions.appendingHiddenContext(
-      hiddenContext,
-      workingDirectory: workingDirectory
+    let phase: BuddyAgentInstructions.AttemptPhase =
+      attempt.status == .awaitingEvaluation ? .awaitingEvaluation : .inProgress
+
+    return BuddyAgentInstructions.appendingHiddenContext(
+      nil,
+      attempt: attempt,
+      question: interviewSession.activeQuestion,
+      timerRemaining: sessionTimer.remaining,
+      phase: phase
     )
   }
 

@@ -5,6 +5,7 @@
 
 import CodingBuddyChat
 import CodingBuddyKit
+import InterviewKit
 import SwiftUI
 
 struct MainContentView: View {
@@ -40,6 +41,8 @@ struct MainContentView: View {
             leadingToolbarButtons
 
             Spacer()
+
+            hintRequestButton
           }
           .padding(.leading, chatToolbarLeadingPadding)
           .padding(.trailing, EaselDesignSystem.Spacing.large)
@@ -123,6 +126,28 @@ struct MainContentView: View {
 
   private var shouldShowSidebar: Bool {
     panelLayoutState.showsSidebar
+  }
+
+  // Deterministic hint layer: coding modes only, disabled once the budget is
+  // spent (free-typed hint asks still work, governed by the prompt).
+  @ViewBuilder
+  private var hintRequestButton: some View {
+    if let mode = chatService.currentMode,
+       mode == .mockInterview || mode == .drill || mode == .practice,
+       chatService.interviewSession.activeAttempt?.status == .inProgress,
+       let hintsRemaining = chatService.interviewSession.hintsRemaining {
+      Button {
+        chatService.requestHint()
+      } label: {
+        Label("Hint (\(hintsRemaining) left)", systemImage: "lightbulb")
+          .font(.system(size: 12, weight: .medium))
+          .labelStyle(.titleAndIcon)
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+      .disabled(hintsRemaining == 0)
+      .help(hintsRemaining == 0 ? "Hint budget spent" : "Request a hint from the interviewer")
+    }
   }
 
   private var leadingToolbarButtons: some View {

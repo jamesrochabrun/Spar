@@ -58,6 +58,12 @@ public final class ChatViewModel {
   /// Optional hidden context supplied by an embedding app when runtime context is omitted.
   @ObservationIgnored public var outgoingHiddenContextProvider: (() -> String?)?
 
+  /// Called when an assistant turn finishes, for any provider. Passes the
+  /// current session id and the last completed assistant message so embedding
+  /// apps can post-process transcript content (dedupe on message id — the
+  /// same message can be reported again after an unrelated turn ends early).
+  @ObservationIgnored public var onAssistantTurnCompleted: ((String?, ChatMessage) -> Void)?
+
   /// Controls whether this view model should manage sessions (load, save, switch, etc.)
   /// Set to false when using ChatScreen directly without RootView to avoid unnecessary session operations
   public let shouldManageSessions: Bool
@@ -609,6 +615,16 @@ EOF
     isLoading = false
     streamingStartTime = nil
     loadingSessionIdentity = nil
+    notifyAssistantTurnCompleted()
+  }
+
+  private func notifyAssistantTurnCompleted() {
+    guard let onAssistantTurnCompleted else { return }
+    guard let lastAssistantMessage = messageStore.messages.last(where: {
+      $0.role == .assistant && $0.isComplete && !$0.content.isEmpty
+    }) else { return }
+
+    onAssistantTurnCompleted(sessionManager.currentSessionId, lastAssistantMessage)
   }
 
   private func handleSessionChange(_ sessionId: String) {
