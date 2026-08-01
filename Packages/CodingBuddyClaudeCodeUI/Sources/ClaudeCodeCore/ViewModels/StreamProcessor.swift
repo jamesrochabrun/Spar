@@ -36,6 +36,11 @@ final class StreamProcessor {
   // Track if we just processed an ExitPlanMode tool to skip its result
   private var skipNextToolResult = false
 
+  /// MCP tool invocation capture (`mcp__<server>__<tool>` names) for embedding
+  /// apps that render MCP app UIs. Arguments/results arrive as JSON strings.
+  var onMCPToolUse: ((_ toolUseId: String, _ toolName: String, _ argumentsJSON: String?) -> Void)?
+  var onMCPToolResult: ((_ toolUseId: String, _ resultJSON: String?) -> Void)?
+
   /// Gets the currently active session ID (pending or current)
   /// Returns the pending session ID if streaming is in progress, otherwise the current session ID
   var activeSessionId: String? {
@@ -430,6 +435,12 @@ final class StreamProcessor {
           return
         }
 
+        if toolUse.name.hasPrefix("mcp__") {
+          let argumentsJSON = (try? JSONEncoder().encode(toolUse.input))
+            .flatMap { String(data: $0, encoding: .utf8) }
+          onMCPToolUse?(toolUse.id, toolUse.name, argumentsJSON)
+        }
+
         // Mark that we've processed a tool use
         state.hasProcessedToolUse = true
 
@@ -511,6 +522,12 @@ final class StreamProcessor {
         messageStore.addMessage(toolMessage)
         
       case .toolResult(let toolResult):
+        if let toolUseId = toolResult.toolUseId {
+          let resultJSON = (try? JSONEncoder().encode(toolResult.content))
+            .flatMap { String(data: $0, encoding: .utf8) }
+          onMCPToolResult?(toolUseId, resultJSON)
+        }
+
         // Check if we should skip this tool result (for ExitPlanMode)
         if skipNextToolResult {
           debugLogger.stream("Skipping tool result for ExitPlanMode")
@@ -572,6 +589,12 @@ final class StreamProcessor {
         logger.debug("User text content: \(textContent)")
         
       case .toolResult(let toolResult):
+        if let toolUseId = toolResult.toolUseId {
+          let resultJSON = (try? JSONEncoder().encode(toolResult.content))
+            .flatMap { String(data: $0, encoding: .utf8) }
+          onMCPToolResult?(toolUseId, resultJSON)
+        }
+
         // Check if we should skip this tool result (for ExitPlanMode)
         if skipNextToolResult {
           debugLogger.stream("Skipping tool result for ExitPlanMode (in user message)")

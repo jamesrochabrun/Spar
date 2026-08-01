@@ -41,6 +41,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     configureStatusItem()
   }
 
+  func applicationWillTerminate(_ notification: Notification) {
+    let service = chatService
+    Task { @MainActor in
+      await service.mcpApps.shutdown()
+    }
+  }
+
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     false
   }

@@ -7,6 +7,8 @@ import AgentHarness
 import AgentProviderMLX
 import AgentProviderOllama
 import AgentProviderOpenAI
+import BuddyMCPApps
+import BuddyMCPUI
 import ClaudeCodeCore
 import ClaudeCodeSDK
 import CodingBuddyKit
@@ -21,6 +23,7 @@ struct ChatSessionContext {
   let deps: DependencyContainer
   let reference: ChatViewModelReference
   let mode: SessionMode
+  let mcpContextKey: String
 }
 
 enum ChatServiceError: LocalizedError {
@@ -61,6 +64,7 @@ public final class ChatService: ChatServiceProtocol {
   public let questionBank: QuestionBankService
   public let skillStats: SkillStatsService
   public let sessionTimer = SessionTimer()
+  public let mcpApps: MCPAppSessionService
 
   /// Mode of the currently visible session, driving surface availability.
   public var currentMode: SessionMode? { activeSessionContext?.mode }
@@ -134,6 +138,13 @@ public final class ChatService: ChatServiceProtocol {
     self.mcpToolsDiscovery = mcpToolsDiscovery
     self.logger = logger
     self.persistentPreferencesManager = persistentPreferencesManager ?? PersistentPreferencesManager(logger: logger)
+    self.mcpApps = MCPAppSessionService(
+      discoveryService: MCPAppDiscoveryService(
+        resolver: AppMCPServerConfigurationResolver(configPathProvider: {
+          AppMCPServerConfigurationResolver.defaultConfigPath()
+        })
+      )
+    )
 
     sessionTimer.onExpiry = { [weak self] in
       Task { @MainActor [weak self] in
@@ -550,7 +561,33 @@ public final class ChatService: ChatServiceProtocol {
       self.handleAssistantTurnCompleted(message, mode: mode)
     }
 
-    return ChatSessionContext(viewModel: viewModel, deps: container, reference: reference, mode: mode)
+    let mcpContextKey = UUID().uuidString
+    viewModel.onMCPToolUse = { [weak self, weak viewModel] toolUseId, toolName, argumentsJSON in
+      guard let self, let viewModel else { return }
+      self.mcpApps.recordToolUse(
+        contextKey: mcpContextKey,
+        provider: self.mcpProviderKind,
+        projectPath: viewModel.projectPath,
+        toolUseId: toolUseId,
+        toolName: toolName,
+        argumentsJSON: argumentsJSON
+      )
+    }
+    viewModel.onMCPToolResult = { [weak self] toolUseId, resultJSON in
+      self?.mcpApps.recordToolResult(
+        contextKey: mcpContextKey,
+        toolUseId: toolUseId,
+        resultJSON: resultJSON
+      )
+    }
+
+    return ChatSessionContext(
+      viewModel: viewModel,
+      deps: container,
+      reference: reference,
+      mode: mode,
+      mcpContextKey: mcpContextKey
+    )
   }
 
   // MARK: - Structured block capture
@@ -722,5 +759,24 @@ public final class ChatService: ChatServiceProtocol {
   private func normalized(_ value: String?) -> String? {
     let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed?.isEmpty == false ? trimmed : nil
+  }
+
+  // MARK: - MCP Apps (whiteboard surface)
+
+  var mcpProviderKind: SessionProviderKind {
+    switch globalPreferences?.chatProvider {
+    case .codex: return .codex
+    default: return .claude
+    }
+  }
+
+  /// Renderable MCP apps for the visible session, fed to the whiteboard panel.
+  public var currentMCPRenderItems: [MCPAppRenderItem] {
+    guard let context = activeSessionContext else { return [] }
+    return mcpApps.renderItems(
+      provider: mcpProviderKind,
+      projectPath: context.viewModel.projectPath,
+      contextKey: context.mcpContextKey
+    )
   }
 }

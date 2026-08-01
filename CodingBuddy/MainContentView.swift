@@ -3,6 +3,7 @@
 //  CodingBuddy
 //
 
+import BuddyMCPApps
 import ClaudeCodeCore
 import CodingBuddyChat
 import CodingBuddyKit
@@ -254,7 +255,7 @@ struct MainContentView: View {
         }
 
         if availableSurfaces.contains(.whiteboard) {
-          whiteboardPlaceholder
+          whiteboardSurface
             .opacity(selectedSurface == .whiteboard ? 1 : 0)
             .allowsHitTesting(selectedSurface == .whiteboard)
             .accessibilityHidden(selectedSurface != .whiteboard)
@@ -286,14 +287,30 @@ struct MainContentView: View {
     }
   }
 
-  private var whiteboardPlaceholder: some View {
-    ContentUnavailableView {
-      Label("Whiteboard", systemImage: "rectangle.3.group")
-    } description: {
-      Text("The excalidraw whiteboard arrives with MCP Apps support.")
+  @ViewBuilder
+  private var whiteboardSurface: some View {
+    let items = chatService.currentMCPRenderItems
+    if items.isEmpty {
+      ContentUnavailableView {
+        Label("Whiteboard", systemImage: "rectangle.3.group")
+      } description: {
+        Text("When Buddy draws on the shared whiteboard (via an MCP app like excalidraw), the diagram renders here.")
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(EaselDesignSystem.Palette.canvas(for: colorScheme))
+    } else {
+      MCPAppSidePanelView(
+        items: items,
+        host: chatService.mcpApps,
+        onDismiss: {
+          selectedSurface = StudioSurface.defaultSurface(for: chatService.currentMode) == .whiteboard
+            ? .problem
+            : StudioSurface.defaultSurface(for: chatService.currentMode)
+        },
+        isEmbedded: true
+      )
+      .background(EaselDesignSystem.Palette.canvas(for: colorScheme))
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(EaselDesignSystem.Palette.canvas(for: colorScheme))
   }
 
   private var studioSurfaceTopBar: some View {

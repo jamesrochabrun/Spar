@@ -16,6 +16,7 @@ let package = Package(
   dependencies: [
     .package(path: "../CodingBuddyKit"),
     .package(path: "../InterviewKit"),
+    .package(path: "../BuddyMCPUI"),
     .package(url: "https://github.com/jamesrochabrun/ClaudeCodeSDK", exact: "1.2.4"),
     .package(path: "../CodingBuddyClaudeCodeUI"),
     .package(path: "../CodingBuddyAgentHarness"),
@@ -30,6 +31,8 @@ let package = Package(
       dependencies: [
         "CodingBuddyKit",
         .product(name: "InterviewKit", package: "InterviewKit"),
+        .product(name: "BuddyMCPUI", package: "BuddyMCPUI"),
+        .product(name: "BuddyMCPApps", package: "BuddyMCPUI"),
         .product(name: "ClaudeCodeSDK", package: "ClaudeCodeSDK"),
         .product(name: "ClaudeCodeCore", package: "CodingBuddyClaudeCodeUI"),
         .product(name: "CodingBuddyAgentHarness", package: "CodingBuddyAgentHarness"),
@@ -48,6 +51,8 @@ let package = Package(
         "CodingBuddyChat",
         "CodingBuddyKit",
         .product(name: "InterviewKit", package: "InterviewKit"),
+        .product(name: "BuddyMCPUI", package: "BuddyMCPUI"),
+        .product(name: "BuddyMCPApps", package: "BuddyMCPUI"),
         .product(name: "ClaudeCodeCore", package: "CodingBuddyClaudeCodeUI"),
         .product(name: "HighlightSwift", package: "highlightswift"),
         .product(name: "CodeEditSourceEditor", package: "CodeEditSourceEditor"),

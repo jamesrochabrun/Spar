@@ -64,6 +64,11 @@ public final class ChatViewModel {
   /// same message can be reported again after an unrelated turn ends early).
   @ObservationIgnored public var onAssistantTurnCompleted: ((String?, ChatMessage) -> Void)?
 
+  /// MCP tool invocation capture (`mcp__<server>__<tool>` names) for embedding
+  /// apps that host MCP app UIs (arguments/results as JSON strings).
+  @ObservationIgnored public var onMCPToolUse: ((_ toolUseId: String, _ toolName: String, _ argumentsJSON: String?) -> Void)?
+  @ObservationIgnored public var onMCPToolResult: ((_ toolUseId: String, _ resultJSON: String?) -> Void)?
+
   /// Controls whether this view model should manage sessions (load, save, switch, etc.)
   /// Set to false when using ChatScreen directly without RootView to avoid unnecessary session operations
   public let shouldManageSessions: Bool
@@ -99,6 +104,13 @@ public final class ChatViewModel {
 
     processor.setParentViewModel { [weak self] in
       self
+    }
+
+    processor.onMCPToolUse = { [weak self] toolUseId, toolName, argumentsJSON in
+      self?.onMCPToolUse?(toolUseId, toolName, argumentsJSON)
+    }
+    processor.onMCPToolResult = { [weak self] toolUseId, resultJSON in
+      self?.onMCPToolResult?(toolUseId, resultJSON)
     }
 
     return processor
