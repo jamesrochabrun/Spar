@@ -48,22 +48,7 @@ struct ProjectResourceTextPreview: View {
       resetEditor(with: text)
     }
     .onChange(of: text) { _, newText in
-      // Recreating the editor (new documentID) tears down the NSTextView and
-      // loses cursor + first responder, so only do it for genuine external
-      // content changes — never for our own save round-tripping back in.
-      if newText == editorText {
-        // Own save: buffer already matches; just mark it clean.
-        savedText = newText
-        hasUnsavedChanges = false
-      } else if editorText == savedText {
-        // No unsaved edits: adopt the external change (seeding, reload).
-        resetEditor(with: newText)
-      } else {
-        // External change while the user has unsaved edits: never clobber
-        // typed code. Track the new on-disk baseline; buffer stays Modified.
-        savedText = newText
-        hasUnsavedChanges = true
-      }
+      resetEditor(with: newText)
     }
   }
 
