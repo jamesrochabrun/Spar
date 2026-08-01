@@ -87,28 +87,6 @@ private struct SourceCodeEditorHost: View {
   @State private var editorState = SourceEditorState()
   @State private var editCoordinator = SourceEditorEditCoordinator()
 
-  /// State binding handed to CodeEdit's SourceEditor with `scrollPosition`
-  /// and `cursorPositions` stripped from reads.
-  ///
-  /// SourceEditor 0.15.2 re-applies the stored state on any SwiftUI update it
-  /// didn't attribute to the text view — and plain typing updates the text
-  /// binding WITHOUT setting that attribution flag, while scroll positions
-  /// land in the state asynchronously. The combination re-applies a stale
-  /// scroll offset while typing or arrowing, snapping the viewport back and
-  /// making the caret appear stuck. Blanking those two fields on read makes
-  /// the wrapper's re-apply a no-op; find-panel state still round-trips.
-  private var stableEditorState: Binding<SourceEditorState> {
-    Binding(
-      get: {
-        var state = editorState
-        state.scrollPosition = nil
-        state.cursorPositions = nil
-        return state
-      },
-      set: { editorState = $0 }
-    )
-  }
-
   var body: some View {
     SourceEditor(
       $text,
@@ -118,7 +96,7 @@ private struct SourceCodeEditorHost: View {
         displayMode: displayMode
       ),
       configuration: editorOptions.makeSourceEditorConfiguration(colorScheme: colorScheme),
-      state: stableEditorState,
+      state: $editorState,
       highlightProviders: highlightProviders,
       coordinators: [editCoordinator]
     )
