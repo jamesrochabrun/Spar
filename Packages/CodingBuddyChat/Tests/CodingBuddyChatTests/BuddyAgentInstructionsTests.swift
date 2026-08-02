@@ -110,6 +110,25 @@ struct BuddyAgentInstructionsTests {
   }
 
   @Test
+  func reviewContractCoachesWithoutRevealingSolutions() {
+    for mode in SessionMode.allCases {
+      let prefixes = BuddyAgentInstructions.prefixes(for: mode)
+      // Full and compact prompts both carry the review trigger and the
+      // never-reveal rule.
+      #expect(prefixes.claude.contains("[REVIEW MY SOLUTION]"))
+      #expect(prefixes.api.contains("[REVIEW MY SOLUTION]"))
+      #expect(prefixes.claude.contains("NEVER provide the corrected code"))
+    }
+
+    let withFile = BuddyAgentInstructions.reviewRequestMessage(fileName: "solution.swift")
+    #expect(withFile.contains("[REVIEW MY SOLUTION]"))
+    #expect(withFile.contains("solution.swift"))
+
+    let withoutFile = BuddyAgentInstructions.reviewRequestMessage(fileName: nil)
+    #expect(withoutFile.contains("[REVIEW MY SOLUTION]"))
+  }
+
+  @Test
   func evaluationDirectiveNamesModeRubric() {
     let directive = BuddyAgentInstructions.evaluationDirective(mode: .behavioral)
     #expect(directive.contains("[EVALUATE NOW]"))

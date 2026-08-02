@@ -13,6 +13,9 @@ struct ProjectResourceTextPreview: View {
   let isRunning: Bool
   /// When set, a Run button appears that saves and runs the current buffer.
   let onRun: ((String) -> Void)?
+  /// When set, a Review button appears that saves the buffer and asks Buddy
+  /// for a coaching review (locate failures, never reveal the solution).
+  let onReview: ((String) -> Void)?
 
   init(
     fileName: String,
@@ -20,7 +23,8 @@ struct ProjectResourceTextPreview: View {
     isSaving: Bool,
     onSave: @escaping (String) -> Void,
     isRunning: Bool = false,
-    onRun: ((String) -> Void)? = nil
+    onRun: ((String) -> Void)? = nil,
+    onReview: ((String) -> Void)? = nil
   ) {
     self.fileName = fileName
     self.text = text
@@ -28,6 +32,7 @@ struct ProjectResourceTextPreview: View {
     self.onSave = onSave
     self.isRunning = isRunning
     self.onRun = onRun
+    self.onReview = onReview
     self._editorText = State(initialValue: text)
     self._savedText = State(initialValue: text)
     self._displayMode = State(initialValue: .displayMode(for: text))
@@ -120,6 +125,17 @@ struct ProjectResourceTextPreview: View {
         .controlSize(.small)
         .disabled(isRunning || isSaving)
         .help("Save and run this file (⌘R)")
+      }
+
+      if let onReview {
+        Button("Review", systemImage: "graduationcap") {
+          onReview(editorText)
+        }
+        .keyboardShortcut("e", modifiers: [.command, .shift])
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(isSaving)
+        .help("Save and ask Buddy to review — points at what fails and how to tackle it, never the answer (⇧⌘E)")
       }
     }
     .frame(height: 32)

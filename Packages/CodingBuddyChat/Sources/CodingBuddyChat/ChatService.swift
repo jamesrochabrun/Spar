@@ -355,6 +355,14 @@ public final class ChatService: ChatServiceProtocol {
     sendMessageToViewModel(BuddyAgentInstructions.hintRequestMessage)
   }
 
+  /// Coaching review of the saved solution: the agent reads the workspace
+  /// file and locates failures / confirms correctness without revealing the
+  /// solution (review contract in the system prompt). Free — no hint cost.
+  public func requestReview(fileName: String? = nil) {
+    guard let attempt = interviewSession.activeAttempt, attempt.status == .inProgress else { return }
+    sendMessageToViewModel(BuddyAgentInstructions.reviewRequestMessage(fileName: fileName))
+  }
+
   /// "End & grade": transitions the attempt and sends the evaluation directive.
   public func endAndGrade() async {
     guard let attempt = interviewSession.activeAttempt, attempt.status == .inProgress else { return }

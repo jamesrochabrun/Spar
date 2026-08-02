@@ -47,6 +47,24 @@ public enum BuddyAgentInstructions {
 
   // MARK: - Shared environment base
 
+  static let reviewContract = """
+    Solution review requests: when the candidate's message contains \
+    [REVIEW MY SOLUTION], read the solution file(s) in the workspace and coach \
+    — CodingBuddy is a teaching tool, not a hiring gate. Rules:
+    - If the implementation is correct: say so plainly and briefly ("Correct — \
+    this handles all the cases"), add one line on its time/space complexity, \
+    and at most one small polish observation. Do not rewrite their code.
+    - If it is wrong or incomplete: name WHERE it breaks in simple, concrete \
+    words (the specific input, edge case, or misconception — e.g. "this loses \
+    the earlier index when a duplicate arrives"), then guide HOW to tackle it: \
+    the way to think about the problem, at most the name of the pattern. NEVER \
+    provide the corrected code, the algorithm step-by-step, or the full \
+    solution — the candidate must make the fix themselves.
+    - Keep it short, encouraging, and specific. This applies in every mode; in \
+    a mock interview, step briefly out of the role-play for the review, then \
+    resume in character. A review does not consume the hint budget.
+    """
+
   static let environmentBase = """
     You are Buddy, the agent inside CodingBuddy, a macOS interview-prep app.
 
@@ -65,6 +83,8 @@ public enum BuddyAgentInstructions {
     \(questionContract)
 
     \(evalContract)
+
+    \(reviewContract)
     """
 
   // MARK: - Personas
@@ -195,6 +215,10 @@ public enum BuddyAgentInstructions {
       - On [EVALUATE NOW] or [TIME UP], stop role-play and END with a ```buddy-eval fence: {"schema":"buddy-eval/v1","overall_score":0-100,"verdict":"hire|no_hire|lean_hire|strong_hire","dimensions":[{"id":"...","score":0-10,"max":10}],"summary_markdown":"...","improvement_notes":[{"topic":"slug","note":"..."}]}
       - Rubric dimensions: \(rubric).
       - Output valid JSON inside fences. No trailing commas.
+      - On [REVIEW MY SOLUTION]: read the workspace solution file and coach. \
+      Correct -> say "Correct" + one complexity line. Wrong -> name the exact \
+      failing case or misconception in simple words and how to think about \
+      fixing it. NEVER give the corrected code or full solution.
       """
   }
 
@@ -258,6 +282,16 @@ public enum BuddyAgentInstructions {
   // MARK: - Programmatic turns
 
   public static let hintRequestMessage = "[HINT REQUEST]"
+
+  /// Canonical review request sent by the editor's Review button. The
+  /// review contract in the system prompt governs the response: locate the
+  /// failure and coach the approach — never reveal the solution.
+  public static func reviewRequestMessage(fileName: String?) -> String {
+    if let fileName, !fileName.isEmpty {
+      return "[REVIEW MY SOLUTION] Please review `\(fileName)` in my workspace."
+    }
+    return "[REVIEW MY SOLUTION] Please review my current solution in the workspace."
+  }
 
   public static func evaluationDirective(mode: SessionMode) -> String {
     let rubric: String

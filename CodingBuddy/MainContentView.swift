@@ -319,7 +319,10 @@ struct MainContentView: View {
         if availableSurfaces.contains(.workspace) {
           WorkspaceEditorView(
             workspacePath: chatService.interviewSession.activeAttempt?.workspacePath,
-            question: chatService.interviewSession.activeQuestion
+            question: chatService.interviewSession.activeQuestion,
+            onReviewRequested: { fileName in
+              chatService.requestReview(fileName: fileName)
+            }
           )
           .opacity(selectedSurface == .workspace ? 1 : 0)
           .allowsHitTesting(selectedSurface == .workspace)

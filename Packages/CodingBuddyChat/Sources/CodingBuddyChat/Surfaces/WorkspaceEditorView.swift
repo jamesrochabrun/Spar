@@ -31,14 +31,20 @@ public struct WorkspaceEditorView: View {
   @State private var runGeneration = 0
   @Environment(\.colorScheme) private var colorScheme
 
+  /// Called after the buffer is saved when the user asks for a coaching
+  /// review; the file name is passed so the request can point at it.
+  private let onReviewRequested: ((String) -> Void)?
+
   public init(
     workspacePath: String?,
     question: Question?,
-    codeRunner: any CodeRunning = ProcessCodeRunner()
+    codeRunner: any CodeRunning = ProcessCodeRunner(),
+    onReviewRequested: ((String) -> Void)? = nil
   ) {
     self.workspacePath = workspacePath
     self.question = question
     self.codeRunner = codeRunner
+    self.onReviewRequested = onReviewRequested
   }
 
   struct WorkspaceFile: Identifiable, Equatable {
@@ -162,7 +168,15 @@ public struct WorkspaceEditorView: View {
           isRunning: isRunning,
           onRun: canRun(selectedFile) ? { latestText in
             saveAndRun(latestText, file: selectedFile)
-          } : nil
+          } : nil,
+          onReview: onReviewRequested.map { onReviewRequested in
+            { latestText in
+              // Save first so the agent reads exactly what's on screen.
+              save(latestText, to: selectedFile)
+              guard loadError == nil else { return }
+              onReviewRequested(selectedFile.fileName)
+            }
+          }
         )
         .id(selectedFile.id)
 
