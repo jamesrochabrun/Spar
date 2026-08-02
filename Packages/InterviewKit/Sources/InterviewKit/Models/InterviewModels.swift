@@ -34,6 +34,17 @@ public enum SessionMode: String, Codable, CaseIterable, Sendable, Identifiable {
     }
   }
 
+  /// One-line description of how the mode is used, shown under its name.
+  public var usageSubtitle: String {
+    switch self {
+    case .mockInterview: return "One timed problem, graded like the real thing"
+    case .drill: return "Rapid-fire reps, difficulty adapts to you"
+    case .practice: return "Untimed tutoring — learn, ask, see solutions"
+    case .systemDesign: return "Design on the whiteboard, defend trade-offs"
+    case .behavioral: return "STAR stories with probing follow-ups"
+    }
+  }
+
   /// Modes with a countdown timer by default.
   public var isTimedByDefault: Bool {
     switch self {

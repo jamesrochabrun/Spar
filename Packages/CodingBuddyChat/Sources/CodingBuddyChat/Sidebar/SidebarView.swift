@@ -127,20 +127,31 @@ public struct SidebarView: View {
         Button {
           sidebarViewModel.toggleGroup(group.mode)
         } label: {
-          HStack(spacing: 8) {
+          HStack(alignment: .top, spacing: 8) {
             Image(systemName: group.systemImage)
               .font(.system(size: 12, weight: .medium))
               .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
               .frame(width: 16)
+              .padding(.top, 2)
 
-            Text(group.displayName)
-              .font(EaselDesignSystem.Typography.interface(size: 13, weight: .semibold))
-              .foregroundStyle(.primary)
+            VStack(alignment: .leading, spacing: 1) {
+              HStack(spacing: 8) {
+                Text(group.displayName)
+                  .font(EaselDesignSystem.Typography.interface(size: 13, weight: .semibold))
+                  .foregroundStyle(.primary)
 
-            if !group.rows.isEmpty {
-              Text("\(group.rows.count)")
-                .font(.system(.caption2, design: .monospaced))
+                if !group.rows.isEmpty {
+                  Text("\(group.rows.count)")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
+                }
+              }
+
+              Text(group.mode.usageSubtitle)
+                .font(.system(size: 10))
                 .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
+                .lineLimit(1)
+                .truncationMode(.tail)
             }
 
             Spacer()
@@ -149,6 +160,7 @@ public struct SidebarView: View {
               .font(.system(size: 10, weight: .semibold))
               .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
               .rotationEffect(.degrees(group.isExpanded ? 90 : 0))
+              .padding(.top, 3)
           }
           .padding(.leading, 8)
           .padding(.vertical, 5)
