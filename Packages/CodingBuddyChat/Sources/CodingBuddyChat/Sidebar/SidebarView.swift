@@ -123,45 +123,67 @@ public struct SidebarView: View {
   @ViewBuilder
   private func modeGroupSection(_ group: ModeGroup) -> some View {
     VStack(alignment: .leading, spacing: 6) {
-      Button {
-        sidebarViewModel.toggleGroup(group.mode)
-      } label: {
-        HStack(spacing: 8) {
-          Image(systemName: group.systemImage)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
-            .frame(width: 16)
+      HStack(spacing: 2) {
+        Button {
+          sidebarViewModel.toggleGroup(group.mode)
+        } label: {
+          HStack(spacing: 8) {
+            Image(systemName: group.systemImage)
+              .font(.system(size: 12, weight: .medium))
+              .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+              .frame(width: 16)
 
-          Text(group.displayName)
-            .font(EaselDesignSystem.Typography.interface(size: 13, weight: .semibold))
-            .foregroundStyle(.primary)
+            Text(group.displayName)
+              .font(EaselDesignSystem.Typography.interface(size: 13, weight: .semibold))
+              .foregroundStyle(.primary)
 
-          if !group.rows.isEmpty {
-            Text("\(group.rows.count)")
-              .font(.system(.caption2, design: .monospaced))
+            if !group.rows.isEmpty {
+              Text("\(group.rows.count)")
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+              .font(.system(size: 10, weight: .semibold))
               .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
+              .rotationEffect(.degrees(group.isExpanded ? 90 : 0))
           }
-
-          Spacer()
-
-          Image(systemName: "chevron.right")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
-            .rotationEffect(.degrees(group.isExpanded ? 90 : 0))
+          .padding(.leading, 8)
+          .padding(.vertical, 5)
+          .contentShape(Rectangle())
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+
+        Button {
+          sidebarViewModel.requestNewSession(mode: group.mode)
+        } label: {
+          Label("New \(group.displayName) Session", systemImage: "plus")
+            .labelStyle(.iconOnly)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+            .frame(width: 20, height: 20)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("New \(group.displayName) session")
+        .padding(.trailing, 4)
       }
-      .buttonStyle(.plain)
 
       if group.isExpanded {
         if group.rows.isEmpty {
-          Text("No sessions yet")
-            .font(.caption)
-            .foregroundStyle(.tertiary)
-            .padding(.horizontal, 12)
-            .padding(.bottom, 4)
+          Button {
+            sidebarViewModel.requestNewSession(mode: group.mode)
+          } label: {
+            Label(startFirstSessionTitle(for: group.mode), systemImage: "plus.circle")
+              .font(.caption)
+              .foregroundStyle(.tint)
+              .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .padding(.horizontal, 12)
+          .padding(.bottom, 4)
         } else {
           ForEach(group.rows) { row in
             SidebarSessionRow(
@@ -180,6 +202,16 @@ public struct SidebarView: View {
           }
         }
       }
+    }
+  }
+
+  private func startFirstSessionTitle(for mode: SessionMode) -> String {
+    switch mode {
+    case .mockInterview: return "Start your first mock interview"
+    case .drill: return "Start your first drill"
+    case .practice: return "Start your first practice session"
+    case .systemDesign: return "Start your first system design session"
+    case .behavioral: return "Start your first behavioral session"
     }
   }
 

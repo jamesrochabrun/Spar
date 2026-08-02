@@ -16,6 +16,9 @@ public final class SidebarViewModel {
   public var selectedSessionId: String?
   public var isSidebarVisible: Bool = true
   public var isNewSessionSheetPresented = false
+  /// Mode the new-session sheet opens preselected to, set by the entry point
+  /// (global "+", a section's "+", or an empty-state button).
+  public private(set) var newSessionInitialMode: SessionMode = .mockInterview
 
   // MARK: - Callbacks
 
@@ -122,7 +125,8 @@ public final class SidebarViewModel {
     isSidebarVisible.toggle()
   }
 
-  public func requestNewSession() {
+  public func requestNewSession(mode: SessionMode = .mockInterview) {
+    newSessionInitialMode = mode
     isNewSessionSheetPresented = true
   }
 

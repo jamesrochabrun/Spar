@@ -119,6 +119,41 @@ struct SidebarViewModelTests {
   }
 
   @Test
+  func requestNewSessionDefaultsToMockInterview() {
+    let (storage, root) = makeStorage()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let viewModel = SidebarViewModel(
+      sessionStorage: NoOpSessionStorage(),
+      interviewStorage: storage
+    )
+
+    viewModel.requestNewSession()
+    #expect(viewModel.isNewSessionSheetPresented)
+    #expect(viewModel.newSessionInitialMode == .mockInterview)
+  }
+
+  @Test
+  func requestNewSessionCarriesModeIntoSheet() {
+    let (storage, root) = makeStorage()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let viewModel = SidebarViewModel(
+      sessionStorage: NoOpSessionStorage(),
+      interviewStorage: storage
+    )
+
+    viewModel.requestNewSession(mode: .drill)
+    #expect(viewModel.isNewSessionSheetPresented)
+    #expect(viewModel.newSessionInitialMode == .drill)
+
+    // A later global "+" must not inherit the previous section's mode.
+    viewModel.isNewSessionSheetPresented = false
+    viewModel.requestNewSession()
+    #expect(viewModel.newSessionInitialMode == .mockInterview)
+  }
+
+  @Test
   func expansionStatePreservedAcrossReloads() async throws {
     let (storage, root) = makeStorage()
     defer { try? FileManager.default.removeItem(at: root) }

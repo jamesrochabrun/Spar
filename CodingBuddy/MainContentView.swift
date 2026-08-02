@@ -212,6 +212,7 @@ struct MainContentView: View {
 
   private func newSessionSheet(for sidebarVM: SidebarViewModel) -> some View {
     NewSessionSheet(
+      initialMode: sidebarVM.newSessionInitialMode,
       topics: sheetTopics,
       bankQuestions: sheetBankQuestions,
       defaultProvider: chatService.globalPreferences?.chatProvider ?? .claude,

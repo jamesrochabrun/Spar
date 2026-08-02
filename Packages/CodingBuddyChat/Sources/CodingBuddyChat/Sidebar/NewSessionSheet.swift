@@ -18,11 +18,11 @@ public struct NewSessionSheet: View {
   private let onStart: (ChatService.NewSessionRequest) -> Void
   private let onCancel: () -> Void
 
-  @State private var mode: SessionMode = .mockInterview
+  @State private var mode: SessionMode
   @State private var selectedTopicIds: Set<String> = []
   @State private var difficulty: Difficulty = .medium
-  @State private var durationMinutes: Int = 35
-  @State private var isTimed = true
+  @State private var durationMinutes: Int
+  @State private var isTimed: Bool
   @State private var hintBudget = 3
   @State private var provider: ChatProvider
   @State private var selectedBankQuestionId: String?
@@ -31,6 +31,7 @@ public struct NewSessionSheet: View {
   private static let durationPresets = [20, 35, 45, 60]
 
   public init(
+    initialMode: SessionMode = .mockInterview,
     topics: [Topic],
     bankQuestions: [Question],
     defaultProvider: ChatProvider,
@@ -42,6 +43,9 @@ public struct NewSessionSheet: View {
     self.defaultProvider = defaultProvider
     self.onStart = onStart
     self.onCancel = onCancel
+    self._mode = State(initialValue: initialMode)
+    self._isTimed = State(initialValue: initialMode.isTimedByDefault)
+    self._durationMinutes = State(initialValue: initialMode == .drill ? 20 : 35)
     self._provider = State(initialValue: defaultProvider)
   }
 
