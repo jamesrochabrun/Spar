@@ -59,21 +59,19 @@ struct SourceCodeEditorViewTests {
   }
 
   @Test
-  func editorOptionsToggleMinimapAndWrappingByMode() {
+  func editorOptionsDisableMinimapAndToggleWrappingByMode() {
     let highlighted = EaselSourceEditorOptions(
       displayMode: .highlighted,
       isEditable: true,
-      isMinimapEnabled: true,
       isWrapLinesEnabled: true
     )
     let plainText = EaselSourceEditorOptions(
       displayMode: .plainText,
       isEditable: true,
-      isMinimapEnabled: true,
       isWrapLinesEnabled: true
     )
 
-    #expect(highlighted.showMinimap)
+    #expect(highlighted.showMinimap == false)
     #expect(highlighted.wrapLines)
     #expect(highlighted.showFoldingRibbon)
     #expect(plainText.showMinimap == false)
@@ -86,7 +84,6 @@ struct SourceCodeEditorViewTests {
     let options = EaselSourceEditorOptions(
       displayMode: .highlighted,
       isEditable: true,
-      isMinimapEnabled: true,
       isWrapLinesEnabled: true
     )
 
@@ -101,6 +98,33 @@ struct SourceCodeEditorViewTests {
     #expect(brightness(of: lightThemeCreatedInDarkAppearance.text.color) < 0.3)
     #expect(brightness(of: darkThemeCreatedInLightAppearance.background) < 0.3)
     #expect(brightness(of: darkThemeCreatedInLightAppearance.text.color) > 0.7)
+  }
+
+  @Test
+  func editorCaretUsesVisibleThemeColorInsteadOfSystemCursor() {
+    let options = EaselSourceEditorOptions(
+      displayMode: .highlighted,
+      isEditable: true,
+      isWrapLinesEnabled: true
+    )
+
+    let lightAppearance = options.makeSourceEditorConfiguration(colorScheme: .light).appearance
+    let darkAppearance = options.makeSourceEditorConfiguration(colorScheme: .dark).appearance
+
+    // The system NSTextInsertionIndicator ignores the theme's insertionPoint and
+    // follows the app accent color, which is near-invisible on the editor
+    // background. The internal cursor must be used so the theme color applies.
+    #expect(lightAppearance.useSystemCursor == false)
+    #expect(darkAppearance.useSystemCursor == false)
+
+    let lightContrast = abs(
+      brightness(of: lightAppearance.theme.insertionPoint) - brightness(of: lightAppearance.theme.background)
+    )
+    let darkContrast = abs(
+      brightness(of: darkAppearance.theme.insertionPoint) - brightness(of: darkAppearance.theme.background)
+    )
+    #expect(lightContrast > 0.4)
+    #expect(darkContrast > 0.4)
   }
 
   @Test

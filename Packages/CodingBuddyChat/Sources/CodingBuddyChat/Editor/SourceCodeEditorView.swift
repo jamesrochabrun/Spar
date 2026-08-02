@@ -79,8 +79,6 @@ private struct SourceCodeEditorHost: View {
   let onTextChange: (String) -> Void
   let onIdleTextSnapshot: (String) -> Void
 
-  @AppStorage(EaselSourceEditorDefaults.minimapEnabled)
-  private var sourceEditorMinimapEnabled = true
   @AppStorage(EaselSourceEditorDefaults.wrapLinesEnabled)
   private var sourceEditorWrapLinesEnabled = true
   @Environment(\.colorScheme) private var colorScheme
@@ -134,7 +132,6 @@ private struct SourceCodeEditorHost: View {
     EaselSourceEditorOptions(
       displayMode: displayMode,
       isEditable: isEditable,
-      isMinimapEnabled: sourceEditorMinimapEnabled,
       isWrapLinesEnabled: sourceEditorWrapLinesEnabled
     )
   }
@@ -146,14 +143,12 @@ private struct SourceCodeEditorHost: View {
 
 private enum EaselSourceEditorDefaults {
   static let keyPrefix = "com.easel."
-  static let minimapEnabled = "\(keyPrefix)editor.minimapEnabled"
   static let wrapLinesEnabled = "\(keyPrefix)editor.wrapLinesEnabled"
 }
 
 struct EaselSourceEditorOptions {
   let displayMode: EditorDisplayMode
   let isEditable: Bool
-  let isMinimapEnabled: Bool
   let isWrapLinesEnabled: Bool
 
   let lineHeightMultiple: Double = 1.3
@@ -173,7 +168,7 @@ struct EaselSourceEditorOptions {
   }
 
   var showMinimap: Bool {
-    isMinimapEnabled && displayMode.usesFullEditorFeatures
+    false
   }
 
   var showFoldingRibbon: Bool {
@@ -189,7 +184,10 @@ struct EaselSourceEditorOptions {
         lineHeightMultiple: lineHeightMultiple,
         letterSpacing: letterSpacing,
         wrapLines: wrapLines,
-        useSystemCursor: true,
+        // The system NSTextInsertionIndicator ignores the theme's insertionPoint
+        // and follows the app accent color — near-invisible ink (#2E2F2F) on the
+        // dark editor background. The internal cursor draws with the theme color.
+        useSystemCursor: false,
         tabWidth: tabWidth,
         bracketPairEmphasis: bracketPairEmphasis
       ),
