@@ -26,7 +26,7 @@ public enum SessionMode: String, Codable, CaseIterable, Sendable, Identifiable {
 
   public var systemImage: String {
     switch self {
-    case .mockInterview: return "person.crop.rectangle.badge.clock"
+    case .mockInterview: return "person.crop.circle.badge.clock"
     case .practice: return "book"
     case .systemDesign: return "rectangle.3.group"
     case .behavioral: return "bubble.left.and.bubble.right"
