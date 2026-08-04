@@ -1565,6 +1565,12 @@ EOF
         self?.recordCompletedTurnUsage(record)
       }
     )
+    runtime.onMCPToolUse = { [weak self] toolUseId, toolName, argumentsJSON in
+      self?.onMCPToolUse?(toolUseId, toolName, argumentsJSON)
+    }
+    runtime.onMCPToolResult = { [weak self] toolUseId, resultJSON in
+      self?.onMCPToolResult?(toolUseId, resultJSON)
+    }
     codexRuntime = runtime
     return runtime
   }

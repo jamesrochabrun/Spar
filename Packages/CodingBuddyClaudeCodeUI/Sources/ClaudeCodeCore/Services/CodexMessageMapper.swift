@@ -50,9 +50,15 @@ enum CodexMessageMapper {
     )
   }
 
+  /// MCP tool results can be enormous (app shells, embedded instructions);
+  /// past this size the transcript shows a truncated preview. The full result
+  /// still reaches MCP-app capture through the runtime hooks.
+  static let mcpToolResultDisplayLimit = 700
+
   static func mcpToolResult(toolName: String?, result: String?, itemID: String?, isError: Bool = false) -> ChatMessage {
     let name = toolName?.isEmpty == false ? toolName! : "MCPTool"
-    let content = result?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? result! : "Completed"
+    let rawContent = result?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? result! : "Completed"
+    let content = truncatedForDisplay(rawContent, limit: mcpToolResultDisplayLimit)
 
     return ChatMessage(
       role: isError ? .toolError : .toolResult,
@@ -179,6 +185,13 @@ enum CodexMessageMapper {
     }
 
     return command
+  }
+
+  static func truncatedForDisplay(_ text: String, limit: Int) -> String {
+    guard text.count > limit else { return text }
+    let prefix = String(text.prefix(limit))
+    let omitted = text.count - limit
+    return "\(prefix)\n… (+\(omitted) more characters)"
   }
 
   private static func unquoted(_ value: String) -> String {

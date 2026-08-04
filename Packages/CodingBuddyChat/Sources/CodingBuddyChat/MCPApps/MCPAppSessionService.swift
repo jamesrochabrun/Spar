@@ -78,10 +78,7 @@ public final class MCPAppSessionService: MCPAppHostBridging {
     guard var invocations = invocationsByContext[contextKey],
           let index = invocations.firstIndex(where: { $0.id == toolUseId }) else { return }
 
-    let result = resultJSON
-      .flatMap { $0.data(using: .utf8) }
-      .flatMap { try? JSONSerialization.jsonObject(with: $0) }
-      .map { AgentHubMCPUIJSONValue(any: $0) }
+    let result = resultJSON.map(Self.parseToolResult)
 
     let existing = invocations[index]
     invocations[index] = MCPAppInvocation(
@@ -98,12 +95,45 @@ public final class MCPAppSessionService: MCPAppHostBridging {
     invocationsByContext.removeValue(forKey: contextKey)
   }
 
-  /// Splits `mcp__<server>__<tool>` into server + short tool name.
+  /// Parses a captured tool result: JSON when it is JSON (Codex's `Ok` error
+  /// envelope unwrapped), otherwise the raw text as a string value.
+  static func parseToolResult(_ raw: String) -> AgentHubMCPUIJSONValue {
+    guard let data = raw.data(using: .utf8),
+          let parsed = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
+      return .string(raw)
+    }
+
+    var value = AgentHubMCPUIJSONValue(any: parsed)
+    if case .object(let object) = value, object.count == 1, let ok = object["Ok"] {
+      value = ok
+    }
+    return value
+  }
+
+  /// Splits a provider-qualified MCP tool name into server + short tool name.
+  /// Claude uses `mcp__<server>__<tool>`; Codex's item stream flattens the
+  /// invocation to `<server>__<tool>` or `<server>.<tool>`.
   static func parseMCPToolName(_ toolName: String) -> (server: String, tool: String)? {
-    guard toolName.hasPrefix("mcp__") else { return nil }
-    let parts = toolName.split(separator: "__", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
-    guard parts.count == 3, !parts[1].isEmpty, !parts[2].isEmpty else { return nil }
-    return (parts[1], parts[2])
+    if toolName.hasPrefix("mcp__") {
+      let parts = toolName.split(separator: "__", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
+      guard parts.count == 3, !parts[1].isEmpty, !parts[2].isEmpty else { return nil }
+      return (parts[1], parts[2])
+    }
+
+    if toolName.contains("__") {
+      let parts = toolName.split(separator: "__", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+      guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else { return nil }
+      return (parts[0], parts[1])
+    }
+
+    if let dot = toolName.firstIndex(of: ".") {
+      let server = String(toolName[..<dot])
+      let tool = String(toolName[toolName.index(after: dot)...])
+      guard !server.isEmpty, !tool.isEmpty else { return nil }
+      return (server, tool)
+    }
+
+    return nil
   }
 
   // MARK: - Lazy resolution
