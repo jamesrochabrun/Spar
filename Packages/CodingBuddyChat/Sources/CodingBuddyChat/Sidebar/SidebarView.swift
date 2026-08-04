@@ -123,16 +123,15 @@ public struct SidebarView: View {
   @ViewBuilder
   private func modeGroupSection(_ group: ModeGroup) -> some View {
     VStack(alignment: .leading, spacing: 6) {
-      HStack(spacing: 2) {
+      HStack(alignment: .center, spacing: 2) {
         Button {
           sidebarViewModel.toggleGroup(group.mode)
         } label: {
-          HStack(alignment: .top, spacing: 8) {
+          HStack(alignment: .center, spacing: 8) {
             Image(systemName: group.systemImage)
               .font(.system(size: 12, weight: .medium))
               .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
               .frame(width: 16)
-              .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 1) {
               HStack(spacing: 8) {
@@ -160,12 +159,13 @@ public struct SidebarView: View {
               .font(.system(size: 10, weight: .semibold))
               .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
               .rotationEffect(.degrees(group.isExpanded ? 90 : 0))
-              .padding(.top, 3)
           }
           .padding(.leading, 8)
           .padding(.vertical, 5)
+          .frame(maxWidth: .infinity, alignment: .leading)
           .contentShape(Rectangle())
         }
+        .frame(maxWidth: .infinity)
         .buttonStyle(.plain)
 
         Button {

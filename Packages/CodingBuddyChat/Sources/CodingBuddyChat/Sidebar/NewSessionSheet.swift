@@ -15,6 +15,7 @@ public struct NewSessionSheet: View {
   private let topics: [Topic]
   private let bankQuestions: [Question]
   private let defaultProvider: ChatProvider
+  private let isModeSelectionLocked: Bool
   private let onStart: (ChatService.NewSessionRequest) -> Void
   private let onCancel: () -> Void
 
@@ -35,12 +36,14 @@ public struct NewSessionSheet: View {
     topics: [Topic],
     bankQuestions: [Question],
     defaultProvider: ChatProvider,
+    isModeSelectionLocked: Bool = false,
     onStart: @escaping (ChatService.NewSessionRequest) -> Void,
     onCancel: @escaping () -> Void
   ) {
     self.topics = topics
     self.bankQuestions = bankQuestions
     self.defaultProvider = defaultProvider
+    self.isModeSelectionLocked = isModeSelectionLocked
     self.onStart = onStart
     self.onCancel = onCancel
     self._mode = State(initialValue: initialMode)
@@ -120,6 +123,7 @@ public struct NewSessionSheet: View {
       }
       .pickerStyle(.segmented)
       .labelsHidden()
+      .disabled(isModeSelectionLocked)
     }
   }
 

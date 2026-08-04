@@ -131,6 +131,7 @@ struct SidebarViewModelTests {
     viewModel.requestNewSession()
     #expect(viewModel.isNewSessionSheetPresented)
     #expect(viewModel.newSessionInitialMode == .mockInterview)
+    #expect(!viewModel.isNewSessionModeSelectionLocked)
   }
 
   @Test
@@ -146,11 +147,13 @@ struct SidebarViewModelTests {
     viewModel.requestNewSession(mode: .drill)
     #expect(viewModel.isNewSessionSheetPresented)
     #expect(viewModel.newSessionInitialMode == .drill)
+    #expect(viewModel.isNewSessionModeSelectionLocked)
 
     // A later global "+" must not inherit the previous section's mode.
     viewModel.isNewSessionSheetPresented = false
     viewModel.requestNewSession()
     #expect(viewModel.newSessionInitialMode == .mockInterview)
+    #expect(!viewModel.isNewSessionModeSelectionLocked)
   }
 
   @Test

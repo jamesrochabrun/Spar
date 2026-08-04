@@ -216,6 +216,7 @@ struct MainContentView: View {
       topics: sheetTopics,
       bankQuestions: sheetBankQuestions,
       defaultProvider: chatService.globalPreferences?.chatProvider ?? .claude,
+      isModeSelectionLocked: sidebarVM.isNewSessionModeSelectionLocked,
       onStart: { request in
         sidebarVM.isNewSessionSheetPresented = false
         sidebarVM.preparePendingNewSession(mode: request.mode, workingDirectory: nil)

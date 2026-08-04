@@ -121,7 +121,7 @@ struct ProjectResourceTextPreview: View {
           onRun(editorText)
         }
         .keyboardShortcut("r", modifiers: .command)
-        .buttonStyle(.bordered)
+        .buttonStyle(.borderedProminent)
         .controlSize(.small)
         .disabled(isRunning || isSaving)
         .help("Save and run this file (⌘R)")
@@ -132,7 +132,7 @@ struct ProjectResourceTextPreview: View {
           onReview(editorText)
         }
         .keyboardShortcut("e", modifiers: [.command, .shift])
-        .buttonStyle(.bordered)
+        .buttonStyle(.borderedProminent)
         .controlSize(.small)
         .disabled(isSaving)
         .help("Save and ask Buddy to review — points at what fails and how to tackle it, never the answer (⇧⌘E)")
