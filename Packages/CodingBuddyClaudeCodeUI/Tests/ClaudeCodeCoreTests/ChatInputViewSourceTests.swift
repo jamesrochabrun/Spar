@@ -24,6 +24,15 @@ final class ChatInputViewSourceTests: XCTestCase {
     XCTAssertFalse(source.contains("viewModel.permissionMode = newMode"))
   }
 
+  func testExternalFocusRequestReachesChatInput() throws {
+    let screenSource = try sourceContents("Sources/ClaudeCodeCore/UI/ChatScreen.swift")
+    let inputSource = try sourceContents("Sources/ClaudeCodeCore/UI/ChatInputView.swift")
+
+    XCTAssertTrue(screenSource.contains("triggerInputFocus: Binding<Bool>"))
+    XCTAssertTrue(screenSource.contains("triggerFocus: $triggerInputFocus"))
+    XCTAssertTrue(inputSource.contains("triggerFocus = false"))
+  }
+
   private func sourceContents(_ relativePath: String) throws -> String {
     let testsDirectory = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()

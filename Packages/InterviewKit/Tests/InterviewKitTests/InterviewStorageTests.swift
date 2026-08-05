@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import SQLite
 import Testing
 @testable import InterviewKit
 
@@ -25,6 +26,26 @@ struct InterviewStorageTests {
     #expect(topics.contains { $0.id == "two-pointers" && $0.category == "algorithms" })
     #expect(topics.contains { $0.id == "sd-caching" && $0.category == "system-design" })
     #expect(topics.contains { $0.id == "bh-ownership" && $0.category == "behavioral" })
+    #expect(topics.contains { $0.id == "ios-concurrency" && $0.category == "ios" })
+    #expect(topics.contains { $0.id == "sd-offline-sync" && $0.category == "system-design" })
+  }
+
+  @Test
+  func seedVersionBumpReseedsExistingDatabase() async throws {
+    let (storage, root) = makeStorage()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    _ = try await storage.allTopics() // initialize + seed at the current version
+
+    // Rewind to a v1-era database: no iOS topics, old seed flag.
+    let dbPath = root.appendingPathComponent("CodingBuddy/interview_bank.sqlite").path
+    let database = try Connection(dbPath)
+    try database.run("DELETE FROM topics WHERE category = 'ios'")
+    try database.run("INSERT OR REPLACE INTO app_meta (key, value) VALUES ('topics_seeded', '1')")
+
+    let upgraded = InterviewSQLiteStorage(applicationSupportDirectory: root)
+    let topics = try await upgraded.allTopics()
+    #expect(topics.contains { $0.id == "ios-swift-language" && $0.category == "ios" })
   }
 
   @Test
@@ -97,7 +118,6 @@ struct InterviewStorageTests {
     let evaluation = RubricEvaluation(
       attemptId: attempt.id,
       overallScore: 72,
-      verdict: "lean_hire",
       summaryMarkdown: "Solid but slow.",
       dimensionScores: [
         DimensionScore(dimension: "correctness", score: 7, comment: "Handled all cases"),
@@ -113,7 +133,6 @@ struct InterviewStorageTests {
 
     let fetched = try await storage.evaluation(forAttemptId: attempt.id)
     #expect(fetched?.overallScore == 72)
-    #expect(fetched?.verdict == "lean_hire")
     #expect(fetched?.dimensionScores.count == 2)
 
     let openNotes = try await storage.openImprovementNotes()
@@ -122,6 +141,36 @@ struct InterviewStorageTests {
     try await storage.setNoteResolved(id: notes[0].id, resolved: true)
     let remaining = try await storage.openImprovementNotes()
     #expect(remaining.count == 1)
+  }
+
+  @Test
+  func deletingAttemptCascadesEvaluationAndNotes() async throws {
+    let (storage, root) = makeStorage()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let attempt = InterviewAttempt(provider: "codex", mode: .practice)
+    try await storage.createAttempt(attempt)
+    try await storage.saveEvaluation(
+      RubricEvaluation(
+        attemptId: attempt.id,
+        overallScore: 88,
+        summaryMarkdown: "Strong technical work.",
+        rawJSON: "{}"
+      ),
+      notes: [
+        ImprovementNote(
+          attemptId: attempt.id,
+          topicId: "graphs",
+          noteMarkdown: "Practice graph traversal."
+        ),
+      ]
+    )
+
+    try await storage.deleteAttempt(id: attempt.id)
+
+    #expect(try await storage.attempt(id: attempt.id) == nil)
+    #expect(try await storage.evaluation(forAttemptId: attempt.id) == nil)
+    #expect(try await storage.notes(forAttemptId: attempt.id).isEmpty)
   }
 
   @Test

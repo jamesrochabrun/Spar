@@ -8,6 +8,8 @@ import Foundation
 public protocol InterviewWorkspaceManaging: Sendable {
   /// Creates (or reuses) the attempt workspace directory and returns its path.
   func createWorkspace(slug: String) throws -> String
+  /// Deletes a workspace previously created inside the managed root.
+  func deleteWorkspace(atPath path: String) throws
 }
 
 /// Creates attempt workspaces under ~/Documents/CodingBuddy/Workspaces/<date>-<slug>.
@@ -50,6 +52,23 @@ public struct InterviewWorkspaceManager: InterviewWorkspaceManaging {
 
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     return directory.path
+  }
+
+  public func deleteWorkspace(atPath path: String) throws {
+    let managedRoot = rootDirectory
+      .standardizedFileURL
+      .resolvingSymlinksInPath()
+    let workspace = URL(fileURLWithPath: path, isDirectory: true)
+      .standardizedFileURL
+      .resolvingSymlinksInPath()
+
+    guard workspace != managedRoot,
+          workspace.deletingLastPathComponent() == managedRoot else {
+      throw InterviewWorkspaceError.unmanagedPath(path)
+    }
+
+    guard FileManager.default.fileExists(atPath: workspace.path) else { return }
+    try FileManager.default.removeItem(at: workspace)
   }
 
   static func sanitized(_ slug: String) -> String {

@@ -17,6 +17,7 @@ public struct WorkspaceEditorView: View {
   private let workspacePath: String?
   private let question: Question?
   private let codeRunner: any CodeRunning
+  private let floatingAccessory: AnyView?
 
   @State private var files: [WorkspaceFile] = []
   @State private var selectedFile: WorkspaceFile?
@@ -39,12 +40,14 @@ public struct WorkspaceEditorView: View {
     workspacePath: String?,
     question: Question?,
     codeRunner: any CodeRunning = ProcessCodeRunner(),
-    onReviewRequested: ((String) -> Void)? = nil
+    onReviewRequested: ((String) -> Void)? = nil,
+    floatingAccessory: AnyView? = nil
   ) {
     self.workspacePath = workspacePath
     self.question = question
     self.codeRunner = codeRunner
     self.onReviewRequested = onReviewRequested
+    self.floatingAccessory = floatingAccessory
   }
 
   struct WorkspaceFile: Identifiable, Equatable {
@@ -179,6 +182,12 @@ public struct WorkspaceEditorView: View {
           }
         )
         .id(selectedFile.id)
+        .overlay(alignment: .bottomTrailing) {
+          if let floatingAccessory {
+            floatingAccessory
+              .padding(18)
+          }
+        }
 
         if isConsoleVisible {
           Rectangle()

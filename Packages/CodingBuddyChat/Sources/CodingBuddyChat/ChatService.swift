@@ -23,6 +23,7 @@ struct ChatSessionContext {
   let deps: DependencyContainer
   let reference: ChatViewModelReference
   let mode: SessionMode
+  let specialization: InterviewSpecialization
   let mcpContextKey: String
 }
 
@@ -65,6 +66,9 @@ public final class ChatService: ChatServiceProtocol {
   public let skillStats: SkillStatsService
   public let sessionTimer = SessionTimer()
   public let mcpApps: MCPAppSessionService
+  /// Interview preferences (specialization track). Read at session-context
+  /// creation, so a settings change applies to the next session started.
+  public let interviewSettings: BuddyInterviewSettings
 
   /// Mode of the currently visible session, driving surface availability.
   public var currentMode: SessionMode? { activeSessionContext?.mode }
@@ -122,6 +126,7 @@ public final class ChatService: ChatServiceProtocol {
     sessionStorage: SessionStorageProtocol = SimplifiedClaudeCodeSQLiteStorage(),
     interviewStorage: (any InterviewStorageProtocol)? = nil,
     workspaceManager: (any InterviewWorkspaceManaging)? = nil,
+    interviewSettings: BuddyInterviewSettings? = nil,
     persistentPreferencesManager: PersistentPreferencesManager? = nil,
     mcpToolsDiscovery: MCPToolsDiscoveryService = MCPToolsDiscoveryService(),
     logger: ClaudeCodeLogger = ClaudeCodeLogger()
@@ -129,6 +134,7 @@ public final class ChatService: ChatServiceProtocol {
     let resolvedInterviewStorage = interviewStorage ?? InterviewSQLiteStorage()
     self.sessionStorage = sessionStorage
     self.interviewStorage = resolvedInterviewStorage
+    self.interviewSettings = interviewSettings ?? BuddyInterviewSettings()
     self.interviewSession = InterviewSessionService(
       storage: resolvedInterviewStorage,
       workspaceManager: workspaceManager ?? InterviewWorkspaceManager()
@@ -363,13 +369,26 @@ public final class ChatService: ChatServiceProtocol {
     sendMessageToViewModel(BuddyAgentInstructions.reviewRequestMessage(fileName: fileName))
   }
 
+  public func requestWhiteboard() {
+    guard currentMode == .systemDesign,
+          interviewSession.activeAttempt?.status == .inProgress else {
+      return
+    }
+    sendMessageToViewModel(BuddyAgentInstructions.whiteboardRequestMessage)
+  }
+
   /// "End & grade": transitions the attempt and sends the evaluation directive.
   public func endAndGrade() async {
     guard let attempt = interviewSession.activeAttempt, attempt.status == .inProgress else { return }
     sessionTimer.stop()
     await interviewSession.requestEvaluation()
     evaluationRepairAttempts = 0
-    sendMessageToViewModel(BuddyAgentInstructions.evaluationDirective(mode: attempt.mode))
+    // Grade with the specialization the session was created under, falling
+    // back to the current setting for restored sessions.
+    let specialization = activeSessionContext?.specialization ?? interviewSettings.specialization
+    sendMessageToViewModel(
+      BuddyAgentInstructions.evaluationDirective(mode: attempt.mode, specialization: specialization)
+    )
   }
 
   private func handleTimerExpired() async {
@@ -442,7 +461,16 @@ public final class ChatService: ChatServiceProtocol {
   }
 
   public func deleteSession(_ session: StoredSession) async {
-    try? await sessionStorage.deleteSession(id: session.id)
+    do {
+      try await interviewSession.deleteAttempt(forChatSessionId: session.id)
+      try await sessionStorage.deleteSession(id: session.id)
+    } catch {
+      chatLog.error(
+        "Could not delete session \(session.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
+      )
+      return
+    }
+
     if let context = sessionContextsById.removeValue(forKey: session.id) {
       sessionIdByViewModelId.removeValue(forKey: ObjectIdentifier(context.viewModel))
       if activeSessionContext?.viewModel === context.viewModel {
@@ -459,6 +487,7 @@ public final class ChatService: ChatServiceProtocol {
       chatViewModel?.clearConversation()
       interviewSession.clearActiveAttempt()
       sessionTimer.stop()
+      setCurrentWorkingDirectory(nil)
     }
     refreshCurrentWorkspaceUsage()
   }
@@ -526,7 +555,8 @@ public final class ChatService: ChatServiceProtocol {
       container.settingsStorage.setProjectPath(workingDirectory)
     }
 
-    let prefixes = BuddyAgentInstructions.prefixes(for: mode)
+    let specialization = interviewSettings.specialization
+    let prefixes = BuddyAgentInstructions.prefixes(for: mode, specialization: specialization)
 
     let client = try ClaudeCodeClient(configuration: config)
     let reference = ChatViewModelReference()
@@ -594,6 +624,7 @@ public final class ChatService: ChatServiceProtocol {
       deps: container,
       reference: reference,
       mode: mode,
+      specialization: specialization,
       mcpContextKey: mcpContextKey
     )
   }

@@ -17,43 +17,57 @@ struct SidebarSessionRow: View {
   @Environment(\.colorScheme) private var colorScheme
 
   var body: some View {
-    Button(action: onSelect) {
-      HStack(spacing: 8) {
-        Circle()
-          .fill(isSelected ? EaselDesignSystem.Palette.accent : EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
-          .frame(width: 6, height: 6)
+    HStack(spacing: 4) {
+      Button(action: onSelect) {
+        HStack(spacing: 8) {
+          Circle()
+            .fill(isSelected ? EaselDesignSystem.Palette.accent : EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
+            .frame(width: 6, height: 6)
 
-        VStack(alignment: .leading, spacing: 2) {
-          HStack(spacing: 6) {
-            Text(row.session.provider.displayName)
-              .font(.system(.caption2, design: .monospaced))
-              .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+          VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+              Text(row.session.provider.displayName)
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
 
-            statusBadge
+              statusBadge
 
-            Spacer()
+              Spacer()
 
-            scoreChip
+              scoreChip
 
-            Text(relativeTime)
-              .font(.system(.caption2, design: .monospaced))
-              .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+              Text(relativeTime)
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+            }
+
+            Text(row.displayTitle)
+              .font(.system(.caption, design: .monospaced))
+              .foregroundStyle(isSelected ? Color.primary : EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+              .lineLimit(1)
+              .truncationMode(.tail)
           }
-
-          Text(row.displayTitle)
-            .font(.system(.caption, design: .monospaced))
-            .foregroundStyle(isSelected ? Color.primary : EaselDesignSystem.Palette.secondaryText(for: colorScheme))
-            .lineLimit(1)
-            .truncationMode(.tail)
         }
+        .padding(.leading, 12)
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
       }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 6)
-      .background(isSelected ? EaselDesignSystem.Palette.selectedSurface(for: colorScheme) : Color.clear)
-      .clipShape(RoundedRectangle(cornerRadius: EaselDesignSystem.Radius.control))
-      .contentShape(Rectangle())
+      .buttonStyle(.plain)
+      .frame(maxWidth: .infinity)
+
+      Button(role: .destructive, action: onDelete) {
+        Label("Delete \(row.displayTitle)", systemImage: "trash")
+          .labelStyle(.iconOnly)
+          .frame(width: 24, height: 24)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
+      .help("Delete session and project")
+      .padding(.trailing, 8)
     }
-    .buttonStyle(.plain)
+    .background(isSelected ? EaselDesignSystem.Palette.selectedSurface(for: colorScheme) : Color.clear)
+    .clipShape(RoundedRectangle(cornerRadius: EaselDesignSystem.Radius.control))
     .contextMenu {
       Button(role: .destructive) {
         onDelete()

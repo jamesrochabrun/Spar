@@ -11,9 +11,14 @@ public struct ChatPanelView: View {
   let chatService: ChatService
 
   @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
+  @Binding private var triggerInputFocus: Bool
 
-  public init(chatService: ChatService) {
+  public init(
+    chatService: ChatService,
+    triggerInputFocus: Binding<Bool> = .constant(false)
+  ) {
     self.chatService = chatService
+    _triggerInputFocus = triggerInputFocus
   }
 
   public var body: some View {
@@ -31,6 +36,7 @@ public struct ChatPanelView: View {
           terminalService: deps.terminalService,
           customPermissionService: deps.customPermissionService,
           columnVisibility: $columnVisibility,
+          triggerInputFocus: $triggerInputFocus,
           uiConfiguration: UIConfiguration(
             appName: "CodingBuddy",
             showSettingsInNavBar: false,

@@ -59,7 +59,7 @@ public struct SidebarView: View {
         }
       }
     } message: {
-      Text("Are you sure you want to delete this session? This action cannot be undone.")
+      Text("This permanently deletes the session, its evaluation data, and its project files. This action cannot be undone.")
     }
     .sheet(isPresented: $sidebarViewModel.isNewSessionSheetPresented) {
       newSessionSheetProvider()
@@ -86,22 +86,24 @@ public struct SidebarView: View {
 
       Spacer()
 
-      Button {
-        sidebarViewModel.requestDashboard()
-      } label: {
-        Image(systemName: "chart.bar.xaxis")
-          .font(.system(size: 13, weight: .medium))
-      }
+      Button(
+        "Dashboard",
+        systemImage: "chart.bar.xaxis",
+        action: sidebarViewModel.requestDashboard
+      )
+      .labelStyle(.iconOnly)
+      .font(.system(size: 13, weight: .medium))
       .buttonStyle(.plain)
       .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
       .help("Dashboard")
 
-      Button {
-        sidebarViewModel.requestNewSession()
-      } label: {
-        Image(systemName: "plus")
-          .font(.system(size: 14, weight: .medium))
-      }
+      Button(
+        "New session",
+        systemImage: "plus",
+        action: sidebarViewModel.requestNewSession
+      )
+      .labelStyle(.iconOnly)
+      .font(.system(size: 14, weight: .medium))
       .buttonStyle(.plain)
       .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
       .help("New session")
@@ -154,11 +156,6 @@ public struct SidebarView: View {
             }
 
             Spacer()
-
-            Image(systemName: "chevron.right")
-              .font(.system(size: 10, weight: .semibold))
-              .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
-              .rotationEffect(.degrees(group.isExpanded ? 90 : 0))
           }
           .padding(.leading, 8)
           .padding(.vertical, 5)
@@ -180,6 +177,23 @@ public struct SidebarView: View {
         }
         .buttonStyle(.plain)
         .help("New \(group.displayName) session")
+
+        Button {
+          sidebarViewModel.toggleGroup(group.mode)
+        } label: {
+          Label(
+            group.isExpanded ? "Collapse \(group.displayName)" : "Expand \(group.displayName)",
+            systemImage: "chevron.right"
+          )
+          .labelStyle(.iconOnly)
+          .font(.system(size: 10, weight: .semibold))
+          .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
+          .rotationEffect(.degrees(group.isExpanded ? 90 : 0))
+          .frame(width: 20, height: 20)
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(group.isExpanded ? "Collapse \(group.displayName)" : "Expand \(group.displayName)")
         .padding(.trailing, 4)
       }
 

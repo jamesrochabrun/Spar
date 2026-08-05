@@ -17,6 +17,10 @@ The agent emits fenced JSON blocks in the transcript that the app parses (`Inter
 
 The contracts live verbatim in `BuddyAgentInstructions.swift` and the parser fixture tests. Keep prompts, parsers, and tests in sync when changing them.
 
+## Interview specialization
+
+`InterviewSpecialization` (InterviewKit, peer of `SessionMode`; default `.iOS`) selects the engineering track for every mode. `SpecializationPromptFactory` (CodingBuddyChat) returns per-(specialization, mode) prompt fragments — full block, compact line for local models, grading addendum — woven in by `BuddyAgentInstructions.prefixes(for:specialization:)` and `evaluationDirective(mode:specialization:)`. The user picks the track in Settings (`InterviewSettingsSection`, persisted by `BuddyInterviewSettings`); `ChatService` reads it when building a session context, so changes apply to the next session. Adding a track = new enum case + factory strings (empty strings mean "no slant", like `.general`).
+
 ## Architecture map
 
 - `CodingBuddy/` — thin AppKit shell: `MainContentView` (sidebar | chat | surface panel), window/panel management.

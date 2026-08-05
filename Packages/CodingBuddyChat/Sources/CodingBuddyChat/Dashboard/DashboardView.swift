@@ -72,6 +72,7 @@ public struct DashboardView: View {
 
   private static let categories: [(id: String, title: String)] = [
     ("algorithms", "Algorithms & Data Structures"),
+    ("ios", "iOS Engineering"),
     ("system-design", "System Design"),
     ("behavioral", "Behavioral"),
   ]

@@ -60,22 +60,13 @@ public struct TimerPillView: View {
         }
       }
 
-      Button(action: onEndAndGrade) {
-        Text("End & Grade")
-          .font(.system(size: 11, weight: .semibold))
-          .padding(.horizontal, 9)
-          .frame(height: 24)
-          .background(
-            Capsule().fill(EaselDesignSystem.Palette.subtleSurface(for: colorScheme))
-          )
-          .overlay {
-            Capsule().stroke(EaselDesignSystem.Palette.border(for: colorScheme), lineWidth: 1)
-          }
-      }
-      .buttonStyle(.plain)
-      .foregroundStyle(.primary)
-      .help("End the session now and get graded")
+      Button("End & Grade", systemImage: "checkmark.seal", action: onEndAndGrade)
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
+        .fixedSize()
+        .help("End the session now and get graded")
     }
+    .fixedSize(horizontal: true, vertical: false)
   }
 
   private var urgencyColor: Color {

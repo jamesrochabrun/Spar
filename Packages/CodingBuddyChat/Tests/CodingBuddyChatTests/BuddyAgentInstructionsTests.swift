@@ -22,6 +22,8 @@ struct BuddyAgentInstructionsTests {
       #expect(prefixes.claude.contains("buddy-eval"))
       #expect(prefixes.api.contains("buddy-question"))
       #expect(prefixes.api.contains("buddy-eval"))
+      #expect(!prefixes.claude.contains("\"verdict\""))
+      #expect(!prefixes.api.contains("\"verdict\""))
       // Compact prompts stay small for local models.
       #expect(prefixes.api.count < prefixes.claude.count)
     }
@@ -40,6 +42,10 @@ struct BuddyAgentInstructionsTests {
     let prefixes = BuddyAgentInstructions.prefixes(for: .systemDesign)
     #expect(prefixes.claude.contains("excalidraw"))
     #expect(prefixes.claude.contains("scalability_tradeoffs"))
+    #expect(prefixes.claude.contains("[CREATE WHITEBOARD]"))
+    #expect(prefixes.codex.contains("[CREATE WHITEBOARD]"))
+    #expect(prefixes.api.contains("[CREATE WHITEBOARD]"))
+    #expect(BuddyAgentInstructions.whiteboardRequestMessage.contains("[CREATE WHITEBOARD]"))
   }
 
   @Test
@@ -129,13 +135,54 @@ struct BuddyAgentInstructionsTests {
   }
 
   @Test
+  func iOSSpecializationFlavorsEveryModeWithoutBreakingContracts() {
+    for mode in SessionMode.allCases {
+      let ios = BuddyAgentInstructions.prefixes(for: mode, specialization: .iOS)
+      let general = BuddyAgentInstructions.prefixes(for: mode, specialization: .general)
+
+      // iOS guidance lands in both the full and compact prompts.
+      #expect(ios.claude.contains("Specialization:"))
+      #expect(ios.api.contains("iOS track:"))
+      // The general track keeps the classic un-slanted prompts.
+      #expect(!general.claude.contains("Specialization:"))
+      #expect(!general.api.contains("iOS track:"))
+      // Contracts and the local-model size invariant survive the insert.
+      #expect(ios.claude.contains("buddy-question"))
+      #expect(ios.claude.contains("buddy-eval"))
+      #expect(ios.api.count < ios.claude.count)
+    }
+  }
+
+  @Test
+  func specializationDefaultsToiOS() {
+    let implicit = BuddyAgentInstructions.prefixes(for: .mockInterview)
+    let explicit = BuddyAgentInstructions.prefixes(for: .mockInterview, specialization: .iOS)
+    #expect(implicit.claude == explicit.claude)
+    #expect(implicit.api == explicit.api)
+    #expect(InterviewSpecialization.default == .iOS)
+  }
+
+  @Test
+  func evaluationDirectiveCarriesSpecializationGuidance() {
+    let ios = BuddyAgentInstructions.evaluationDirective(mode: .mockInterview, specialization: .iOS)
+    #expect(ios.contains("[EVALUATE NOW]"))
+    #expect(ios.contains("iOS role"))
+
+    let general = BuddyAgentInstructions.evaluationDirective(mode: .mockInterview, specialization: .general)
+    #expect(general.contains("[EVALUATE NOW]"))
+    #expect(!general.contains("iOS role"))
+  }
+
+  @Test
   func evaluationDirectiveNamesModeRubric() {
     let directive = BuddyAgentInstructions.evaluationDirective(mode: .behavioral)
     #expect(directive.contains("[EVALUATE NOW]"))
     #expect(directive.contains("star_structure"))
     #expect(directive.contains("buddy-eval"))
+    #expect(!directive.contains("\"verdict\""))
 
     let repair = BuddyAgentInstructions.evaluationRepairDirective()
     #expect(repair.contains("buddy-eval"))
+    #expect(!repair.contains("\"verdict\""))
   }
 }

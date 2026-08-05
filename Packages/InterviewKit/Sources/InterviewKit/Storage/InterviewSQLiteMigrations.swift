@@ -169,7 +169,6 @@ final class InterviewSQLiteMigrationManager {
         attempt_id       TEXT NOT NULL UNIQUE REFERENCES attempts(id) ON DELETE CASCADE,
         created_at       REAL NOT NULL,
         overall_score    REAL NOT NULL,
-        verdict          TEXT,
         summary_markdown TEXT NOT NULL,
         raw_json         TEXT NOT NULL
       );

@@ -15,6 +15,7 @@ public struct NewSessionSheet: View {
   private let topics: [Topic]
   private let bankQuestions: [Question]
   private let defaultProvider: ChatProvider
+  private let specialization: InterviewSpecialization
   private let isModeSelectionLocked: Bool
   private let onStart: (ChatService.NewSessionRequest) -> Void
   private let onCancel: () -> Void
@@ -36,6 +37,7 @@ public struct NewSessionSheet: View {
     topics: [Topic],
     bankQuestions: [Question],
     defaultProvider: ChatProvider,
+    specialization: InterviewSpecialization = .default,
     isModeSelectionLocked: Bool = false,
     onStart: @escaping (ChatService.NewSessionRequest) -> Void,
     onCancel: @escaping () -> Void
@@ -43,6 +45,7 @@ public struct NewSessionSheet: View {
     self.topics = topics
     self.bankQuestions = bankQuestions
     self.defaultProvider = defaultProvider
+    self.specialization = specialization
     self.isModeSelectionLocked = isModeSelectionLocked
     self.onStart = onStart
     self.onCancel = onCancel
@@ -131,7 +134,12 @@ public struct NewSessionSheet: View {
     switch mode {
     case .systemDesign: return ["system-design"]
     case .behavioral: return ["behavioral"]
-    default: return ["algorithms", "data-structures"]
+    default:
+      var categories = ["algorithms", "data-structures"]
+      if specialization == .iOS {
+        categories.append("ios")
+      }
+      return categories
     }
   }
 

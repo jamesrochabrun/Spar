@@ -21,6 +21,10 @@ struct GlobalSettingsView: View {
   /// (e.g. the embedding app's on-device MLX model manager). Injected as a
   /// closure so ClaudeCodeCore need not link the MLX package.
   let apiExtraContent: (() -> AnyView)?
+  /// Optional app-owned sections rendered at the top of the Form regardless
+  /// of provider (e.g. CodingBuddy's interview settings). Keeps domain
+  /// concepts out of this generic package.
+  let extraSections: (() -> AnyView)?
 
   init(
     uiConfiguration: UIConfiguration = .default,
@@ -30,7 +34,8 @@ struct GlobalSettingsView: View {
     claudeModelCatalog: any ClaudeModelCatalogProviding = ClaudeModelCatalog(),
     credentialStore: any CredentialStore = KeychainCredentialStore(),
     apiModelCatalog: any APIModelCatalogProviding = APIModelCatalog(),
-    apiExtraContent: (() -> AnyView)? = nil
+    apiExtraContent: (() -> AnyView)? = nil,
+    extraSections: (() -> AnyView)? = nil
   ) {
     self.uiConfiguration = uiConfiguration
     self.chatViewModel = chatViewModel
@@ -40,6 +45,7 @@ struct GlobalSettingsView: View {
     self.credentialStore = credentialStore
     self.apiModelCatalog = apiModelCatalog
     self.apiExtraContent = apiExtraContent
+    self.extraSections = extraSections
   }
   
   // MARK: - Constants
@@ -116,6 +122,10 @@ struct GlobalSettingsView: View {
   private var preferencesView: some View {
     return VStack(spacing: 0) {
       Form {
+        if let extraSections {
+          extraSections()
+        }
+
         providerConfigurationSection
 
         if globalPreferences.chatProvider == .api {

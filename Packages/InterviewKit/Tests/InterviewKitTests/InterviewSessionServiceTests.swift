@@ -13,6 +13,7 @@ struct InterviewSessionServiceTests {
   private struct FixedWorkspaceManager: InterviewWorkspaceManaging {
     let path: String
     func createWorkspace(slug: String) throws -> String { path }
+    func deleteWorkspace(atPath path: String) throws {}
   }
 
   private func makeService() -> (InterviewSessionService, InterviewSQLiteStorage, URL) {

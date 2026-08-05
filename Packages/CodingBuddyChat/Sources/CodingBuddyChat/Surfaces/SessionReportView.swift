@@ -7,36 +7,42 @@ import CodingBuddyKit
 import InterviewKit
 import SwiftUI
 
-/// Report surface: overall score, verdict, per-dimension rubric bars with
-/// comments, summary, and improvement notes.
+/// Report surface: overall score, per-dimension rubric bars with comments,
+/// summary, and improvement notes.
 public struct SessionReportView: View {
   private let evaluation: RubricEvaluation?
   private let notes: [ImprovementNote]
   private let attempt: InterviewAttempt?
+  private let isGenerating: Bool
 
   @Environment(\.colorScheme) private var colorScheme
 
-  public init(evaluation: RubricEvaluation?, notes: [ImprovementNote], attempt: InterviewAttempt?) {
+  public init(
+    evaluation: RubricEvaluation?,
+    notes: [ImprovementNote],
+    attempt: InterviewAttempt?,
+    isGenerating: Bool = false
+  ) {
     self.evaluation = evaluation
     self.notes = notes
     self.attempt = attempt
+    self.isGenerating = isGenerating
   }
 
   public var body: some View {
     Group {
-      if let evaluation {
-        ScrollView {
-          VStack(alignment: .leading, spacing: 22) {
-            scoreHeader(evaluation)
-            dimensionBars(evaluation)
-            summarySection(evaluation)
-            if !notes.isEmpty {
-              notesSection
-            }
-          }
-          .padding(24)
+      switch SessionReportPresentation.resolve(
+        hasEvaluation: evaluation != nil,
+        attemptStatus: attempt?.status,
+        isGenerating: isGenerating
+      ) {
+      case .evaluation:
+        if let evaluation {
+          evaluationContent(evaluation)
         }
-      } else {
+      case .grading:
+        GradingReportProgressView()
+      case .empty:
         ContentUnavailableView {
           Label("No evaluation yet", systemImage: "chart.bar.doc.horizontal")
         } description: {
@@ -46,6 +52,20 @@ public struct SessionReportView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(EaselDesignSystem.Palette.canvas(for: colorScheme))
+  }
+
+  private func evaluationContent(_ evaluation: RubricEvaluation) -> some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 22) {
+        scoreHeader(evaluation)
+        dimensionBars(evaluation)
+        summarySection(evaluation)
+        if !notes.isEmpty {
+          notesSection
+        }
+      }
+      .padding(24)
+    }
   }
 
   private func scoreHeader(_ evaluation: RubricEvaluation) -> some View {
@@ -66,11 +86,9 @@ public struct SessionReportView: View {
       .frame(width: 88, height: 88)
 
       VStack(alignment: .leading, spacing: 6) {
-        if let verdict = evaluation.verdict {
-          Text(verdictDisplay(verdict))
-            .font(EaselDesignSystem.Typography.interface(size: 18, weight: .semibold))
-            .foregroundStyle(verdictColor(verdict))
-        }
+        Text("Technical Evaluation")
+          .font(EaselDesignSystem.Typography.interface(size: 18, weight: .semibold))
+          .foregroundStyle(.primary)
 
         Text("Graded \(evaluation.createdAt.formatted(date: .abbreviated, time: .shortened))")
           .font(.caption)
@@ -208,23 +226,6 @@ public struct SessionReportView: View {
       .split(separator: "_")
       .map { $0.prefix(1).uppercased() + $0.dropFirst() }
       .joined(separator: " ")
-  }
-
-  private func verdictDisplay(_ verdict: String) -> String {
-    verdict
-      .split(separator: "_")
-      .map { $0.prefix(1).uppercased() + $0.dropFirst() }
-      .joined(separator: " ")
-  }
-
-  private func verdictColor(_ verdict: String) -> Color {
-    switch verdict {
-    case "strong_hire": return .green
-    case "hire": return .green
-    case "lean_hire": return .orange
-    case "no_hire": return .red
-    default: return .primary
-    }
   }
 
   private func scoreColor(_ score: Double) -> Color {

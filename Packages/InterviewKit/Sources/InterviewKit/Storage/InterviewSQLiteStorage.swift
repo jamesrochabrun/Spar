@@ -23,14 +23,33 @@ public actor InterviewSQLiteStorage: InterviewStorageProtocol {
 
   // MARK: - Topic seeding
 
+  /// Bump when seedTopics gains entries so existing databases re-seed
+  /// (inserts are OR IGNORE, so re-running is safe).
+  static let topicSeedVersion = "2"
+
   static let seedTopics: [Topic] = {
     let algorithms = [
       "two-pointers", "sliding-window", "binary-search", "dynamic-programming",
       "graphs", "trees", "heaps", "hash-maps", "stacks-queues", "intervals",
       "backtracking", "greedy", "linked-lists", "strings", "math", "bit-manipulation",
     ]
-    let systemDesign = ["sd-scalability", "sd-storage", "sd-caching", "sd-queues", "sd-api-design"]
+    let systemDesign = [
+      "sd-scalability", "sd-storage", "sd-caching", "sd-queues", "sd-api-design",
+      "sd-offline-sync",
+    ]
     let behavioral = ["bh-leadership", "bh-conflict", "bh-failure", "bh-collaboration", "bh-ownership"]
+    let ios: [(slug: String, name: String)] = [
+      ("ios-swift-language", "Swift Language"),
+      ("ios-memory-management", "Memory & ARC"),
+      ("ios-concurrency", "Swift Concurrency"),
+      ("ios-uikit", "UIKit"),
+      ("ios-swiftui", "SwiftUI"),
+      ("ios-persistence", "Persistence"),
+      ("ios-networking", "Networking"),
+      ("ios-architecture", "App Architecture"),
+      ("ios-performance", "Performance & Instruments"),
+      ("ios-testing", "Testing"),
+    ]
 
     func displayName(_ slug: String) -> String {
       slug
@@ -50,6 +69,9 @@ public actor InterviewSQLiteStorage: InterviewStorageProtocol {
     }
     for (index, slug) in behavioral.enumerated() {
       topics.append(Topic(id: slug, displayName: displayName(slug), category: "behavioral", sortOrder: index))
+    }
+    for (index, entry) in ios.enumerated() {
+      topics.append(Topic(id: entry.slug, displayName: entry.name, category: "ios", sortOrder: index))
     }
     return topics
   }()
@@ -93,7 +115,7 @@ public actor InterviewSQLiteStorage: InterviewStorageProtocol {
     let seeded = try database.scalar(
       "SELECT value FROM app_meta WHERE key = 'topics_seeded'"
     ) as? String
-    guard seeded != "1" else { return }
+    guard seeded != Self.topicSeedVersion else { return }
 
     try database.transaction {
       for topic in Self.seedTopics {
@@ -103,7 +125,8 @@ public actor InterviewSQLiteStorage: InterviewStorageProtocol {
         )
       }
       try database.run(
-        "INSERT OR REPLACE INTO app_meta (key, value) VALUES ('topics_seeded', '1')"
+        "INSERT OR REPLACE INTO app_meta (key, value) VALUES ('topics_seeded', ?)",
+        Self.topicSeedVersion
       )
     }
   }
@@ -328,6 +351,11 @@ public actor InterviewSQLiteStorage: InterviewStorageProtocol {
     return nil
   }
 
+  public func deleteAttempt(id: String) async throws {
+    try initializeDatabaseIfNeeded()
+    try database.run("DELETE FROM attempts WHERE id = ?", id)
+  }
+
   private func attemptFromRow(_ row: Statement.Element) -> InterviewAttempt? {
     guard
       let id = row[0] as? String,
@@ -365,11 +393,11 @@ public actor InterviewSQLiteStorage: InterviewStorageProtocol {
       try database.run(
         """
         INSERT INTO evaluations
-          (id, attempt_id, created_at, overall_score, verdict, summary_markdown, raw_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+          (id, attempt_id, created_at, overall_score, summary_markdown, raw_json)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
         e.id, e.attemptId, e.createdAt.timeIntervalSince1970,
-        e.overallScore, e.verdict, e.summaryMarkdown, e.rawJSON
+        e.overallScore, e.summaryMarkdown, e.rawJSON
       )
       for score in e.dimensionScores {
         try database.run(
@@ -403,7 +431,7 @@ public actor InterviewSQLiteStorage: InterviewStorageProtocol {
   public func evaluation(forAttemptId attemptId: String) async throws -> RubricEvaluation? {
     try initializeDatabaseIfNeeded()
     let sql = """
-      SELECT id, attempt_id, created_at, overall_score, verdict, summary_markdown, raw_json
+      SELECT id, attempt_id, created_at, overall_score, summary_markdown, raw_json
       FROM evaluations WHERE attempt_id = ?
       """
     for row in try database.prepare(sql, [attemptId]) {
@@ -412,8 +440,8 @@ public actor InterviewSQLiteStorage: InterviewStorageProtocol {
         let attemptId = row[1] as? String,
         let createdAt = row[2] as? Double,
         let overallScore = row[3] as? Double,
-        let summaryMarkdown = row[5] as? String,
-        let rawJSON = row[6] as? String
+        let summaryMarkdown = row[4] as? String,
+        let rawJSON = row[5] as? String
       else { continue }
 
       var scores: [DimensionScore] = []
@@ -439,7 +467,6 @@ public actor InterviewSQLiteStorage: InterviewStorageProtocol {
         attemptId: attemptId,
         createdAt: Date(timeIntervalSince1970: createdAt),
         overallScore: overallScore,
-        verdict: row[4] as? String,
         summaryMarkdown: summaryMarkdown,
         dimensionScores: scores,
         rawJSON: rawJSON

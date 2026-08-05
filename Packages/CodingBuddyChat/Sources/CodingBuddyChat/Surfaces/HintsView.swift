@@ -2,9 +2,9 @@
 //  HintsView.swift
 //  CodingBuddyChat
 //
-//  Hints surface: the active question recap, the hint budget with the
-//  deterministic "Request hint" action, and per-mode strategy guidance for
-//  how to tackle the problem. Reference notes are never shown.
+//  Reusable hints content for the floating editor popover and non-coding
+//  hints surface: active question recap, deterministic hint budget action,
+//  and per-mode strategy guidance. Reference notes are never shown.
 //
 
 import CodingBuddyKit

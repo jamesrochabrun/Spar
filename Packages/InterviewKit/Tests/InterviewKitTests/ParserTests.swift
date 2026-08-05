@@ -72,14 +72,13 @@ struct RubricEvaluationParserTests {
   @Test
   func parsesValidEvalBlock() {
     let block = """
-      {"schema":"buddy-eval/v1","overall_score":72,"verdict":"lean_hire",
+      {"schema":"buddy-eval/v1","overall_score":72,
        "dimensions":[{"id":"correctness","score":7,"max":10,"comment":"ok"}],
        "summary_markdown":"Good effort.",
        "improvement_notes":[{"topic":"dynamic-programming","note":"Practice DP."}]}
-      """
+    """
     let captured = RubricEvaluationParser.parse(block, attemptId: "attempt-1")
     #expect(captured?.evaluation.overallScore == 72)
-    #expect(captured?.evaluation.verdict == "lean_hire")
     #expect(captured?.evaluation.dimensionScores.first?.dimension == "correctness")
     #expect(captured?.evaluation.dimensionScores.first?.score == 7)
     #expect(captured?.notes.count == 1)

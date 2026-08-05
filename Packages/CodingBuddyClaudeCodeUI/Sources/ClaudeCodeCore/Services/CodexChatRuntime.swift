@@ -25,8 +25,9 @@ final class CodexChatRuntime: ChatRuntime {
   private let onUsageRecorded: ((SessionUsageRecord) -> Void)?
 
   /// MCP tool invocation capture for embedding apps that host MCP app UIs,
-  /// mirroring StreamProcessor's hooks on the Claude path. Codex item-stream
-  /// tool names arrive as `<server>__<tool>`; arguments/results are JSON strings.
+  /// mirroring StreamProcessor's hooks on the Claude path. CodexSDK currently
+  /// omits the MCP server from its decoded item, so the qualified tool identity
+  /// is recovered from the event's preserved raw JSON line.
   var onMCPToolUse: ((_ toolUseId: String, _ toolName: String, _ argumentsJSON: String?) -> Void)?
   var onMCPToolResult: ((_ toolUseId: String, _ resultJSON: String?) -> Void)?
   private var hasSession = false
@@ -469,7 +470,7 @@ final class CodexChatRuntime: ChatRuntime {
           itemID: item.id
         ))
       }
-      emitMCPToolUse(item)
+      emitMCPToolUse(item, rawLine: event.rawLine)
 
     case ("item.completed", "mcp_tool_call"):
       if !hasItemDisplayed(item.id, state: state) {
@@ -487,7 +488,7 @@ final class CodexChatRuntime: ChatRuntime {
       ))
       // Re-emit the invocation: completed items can carry arguments the
       // started event lacked (capture replaces by id).
-      emitMCPToolUse(item)
+      emitMCPToolUse(item, rawLine: event.rawLine)
       if let itemID = item.id {
         onMCPToolResult?(itemID, item.toolResult)
       }
@@ -698,14 +699,41 @@ final class CodexChatRuntime: ChatRuntime {
     state.displayedItemIds.insert(id)
   }
 
-  private func emitMCPToolUse(_ item: CodexJSONEventItem) {
+  private func emitMCPToolUse(_ item: CodexJSONEventItem, rawLine: String?) {
     guard let itemID = item.id, let toolName = item.toolName, !toolName.isEmpty else { return }
     // AnyCodable is decode-only; re-serialize the raw values it decoded.
     let argumentsJSON = item.toolArguments
       .map { $0.mapValues(\.value) }
       .flatMap { try? JSONSerialization.data(withJSONObject: $0) }
       .flatMap { String(data: $0, encoding: .utf8) }
-    onMCPToolUse?(itemID, toolName, argumentsJSON)
+    onMCPToolUse?(
+      itemID,
+      Self.qualifiedMCPToolName(fallbackToolName: toolName, rawLine: rawLine),
+      argumentsJSON
+    )
+  }
+
+  /// Codex's live JSON item contains both `server` and `tool`, but CodexSDK
+  /// 1.0.6 only exposes `tool`. Recover the full MCP identity from `rawLine` so
+  /// downstream app discovery can resolve the correct server and UI resource.
+  nonisolated static func qualifiedMCPToolName(
+    fallbackToolName: String,
+    rawLine: String?
+  ) -> String {
+    guard let rawLine,
+          let data = rawLine.data(using: .utf8),
+          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let item = root["item"] as? [String: Any],
+          let server = item["server"] as? String,
+          !server.isEmpty else {
+      return fallbackToolName
+    }
+
+    let tool = (item["tool"] as? String)
+      ?? (item["tool_name"] as? String)
+      ?? fallbackToolName
+    guard !tool.isEmpty else { return fallbackToolName }
+    return "\(server)__\(tool)"
   }
 
   private func hasItemDisplayed(_ id: String?, state: StreamState) -> Bool {

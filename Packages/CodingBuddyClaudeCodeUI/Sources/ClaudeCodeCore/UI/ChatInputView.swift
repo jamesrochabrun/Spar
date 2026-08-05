@@ -373,6 +373,7 @@ extension ChatInputView {
         .padding(textAreaEdgeInsets)
         .onAppear {
           isFocused = true
+          triggerFocus = false
         }
         .onChange(of: triggerFocus) { _, shouldFocus in
           if shouldFocus {

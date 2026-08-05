@@ -50,6 +50,7 @@ public struct ChatScreen: View {
     terminalService: TerminalService,
     customPermissionService: CustomPermissionService,
     columnVisibility: Binding<NavigationSplitViewVisibility>,
+    triggerInputFocus: Binding<Bool> = .constant(false),
     uiConfiguration: UIConfiguration = .default,
     attachmentImportService: any ChatAttachmentImportService = DefaultChatAttachmentImportService(),
     attachmentProcessingService: any AttachmentProcessingService = AttachmentProcessor()
@@ -59,6 +60,7 @@ public struct ChatScreen: View {
     self.terminalService = terminalService
     _customPermissionService = State(initialValue: customPermissionService)
     _columnVisibility = columnVisibility
+    _triggerInputFocus = triggerInputFocus
     self.uiConfiguration = uiConfiguration
     self.attachmentImportService = attachmentImportService
     self.attachmentProcessingService = attachmentProcessingService
@@ -90,6 +92,7 @@ public struct ChatScreen: View {
   /// Binding controlling the visibility of navigation split view columns
   /// Used to toggle sidebar visibility in the navigation interface
   @Binding var columnVisibility: NavigationSplitViewVisibility
+  @Binding var triggerInputFocus: Bool
   
   /// The current text in the message input field
   /// Bound to the ChatInputView for user text entry
@@ -132,6 +135,7 @@ public struct ChatScreen: View {
         contextManager: contextManager,
         uiConfiguration: uiConfiguration,
         placeholder: "Message \(uiConfiguration.appName)...",
+        triggerFocus: $triggerInputFocus,
         attachmentImportService: attachmentImportService,
         attachmentProcessingService: attachmentProcessingService)
     }

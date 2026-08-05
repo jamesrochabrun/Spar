@@ -12,6 +12,7 @@ public struct ClaudeCodeGlobalSettingsSceneView: View {
   private let providedMCPToolsDiscovery: MCPToolsDiscoveryService?
   private let apiModelCatalog: (any APIModelCatalogProviding)?
   private let apiExtraContent: (() -> AnyView)?
+  private let extraSections: (() -> AnyView)?
 
   @State private var ownedGlobalPreferences = GlobalPreferencesStorage()
   @State private var ownedMCPToolsDiscovery = MCPToolsDiscoveryService()
@@ -22,7 +23,8 @@ public struct ClaudeCodeGlobalSettingsSceneView: View {
     globalPreferences: GlobalPreferencesStorage? = nil,
     mcpToolsDiscovery: MCPToolsDiscoveryService? = nil,
     apiModelCatalog: (any APIModelCatalogProviding)? = nil,
-    apiExtraContent: (() -> AnyView)? = nil
+    apiExtraContent: (() -> AnyView)? = nil,
+    extraSections: (() -> AnyView)? = nil
   ) {
     self.uiConfiguration = uiConfiguration
     self.chatViewModel = chatViewModel
@@ -30,6 +32,7 @@ public struct ClaudeCodeGlobalSettingsSceneView: View {
     self.providedMCPToolsDiscovery = mcpToolsDiscovery
     self.apiModelCatalog = apiModelCatalog
     self.apiExtraContent = apiExtraContent
+    self.extraSections = extraSections
   }
 
   public var body: some View {
@@ -45,14 +48,16 @@ public struct ClaudeCodeGlobalSettingsSceneView: View {
         chatViewModel: chatViewModel,
         mcpToolsDiscovery: activeMCPToolsDiscovery,
         apiModelCatalog: apiModelCatalog,
-        apiExtraContent: apiExtraContent
+        apiExtraContent: apiExtraContent,
+        extraSections: extraSections
       )
     } else {
       GlobalSettingsView(
         uiConfiguration: uiConfiguration,
         chatViewModel: chatViewModel,
         mcpToolsDiscovery: activeMCPToolsDiscovery,
-        apiExtraContent: apiExtraContent
+        apiExtraContent: apiExtraContent,
+        extraSections: extraSections
       )
     }
   }

@@ -22,6 +22,9 @@ struct MainContentView: View {
   @State private var sheetBankQuestions: [Question] = []
   @State private var selectedSurface: StudioSurface = .workspace
   @State private var contentMode: MainContentMode = .session
+  @State private var isReportGenerationRequested = false
+  @State private var isChatInputFocusRequested = false
+  @State private var isWhiteboardCreationRequested = false
   @Environment(\.colorScheme) private var colorScheme
 
   private let chatPanelWidth: CGFloat = 380
@@ -54,8 +57,6 @@ struct MainContentView: View {
               leadingToolbarButtons
 
               Spacer()
-
-              hintRequestButton
             }
             .padding(.leading, chatToolbarLeadingPadding)
             .padding(.trailing, EaselDesignSystem.Spacing.large)
@@ -66,7 +67,10 @@ struct MainContentView: View {
               .fill(EaselDesignSystem.Palette.border(for: colorScheme))
               .frame(height: 1)
 
-            ChatPanelView(chatService: chatService)
+            ChatPanelView(
+              chatService: chatService,
+              triggerInputFocus: $isChatInputFocusRequested
+            )
               .frame(maxHeight: .infinity)
           }
           .frame(width: chatPanelWidth)
@@ -108,6 +112,7 @@ struct MainContentView: View {
         }
       }
       vm.onStartSession = { request in
+        isReportGenerationRequested = false
         selectedSurface = StudioSurface.defaultSurface(for: request.mode)
         Task {
           await chatService.initialize()
@@ -116,6 +121,7 @@ struct MainContentView: View {
         }
       }
       chatService.onEvaluationRecorded = { _ in
+        isReportGenerationRequested = false
         selectedSurface = .report
       }
       vm.onDashboardToggle = {
@@ -216,6 +222,7 @@ struct MainContentView: View {
       topics: sheetTopics,
       bankQuestions: sheetBankQuestions,
       defaultProvider: chatService.globalPreferences?.chatProvider ?? .claude,
+      specialization: chatService.interviewSettings.specialization,
       isModeSelectionLocked: sidebarVM.isNewSessionModeSelectionLocked,
       onStart: { request in
         sidebarVM.isNewSessionSheetPresented = false
@@ -229,28 +236,6 @@ struct MainContentView: View {
     .task {
       sheetTopics = (try? await chatService.interviewStorage.allTopics()) ?? []
       sheetBankQuestions = await chatService.questionBank.questions()
-    }
-  }
-
-  // Deterministic hint layer: coding modes only, disabled once the budget is
-  // spent (free-typed hint asks still work, governed by the prompt).
-  @ViewBuilder
-  private var hintRequestButton: some View {
-    if let mode = chatService.currentMode,
-       mode == .mockInterview || mode == .drill || mode == .practice,
-       chatService.interviewSession.activeAttempt?.status == .inProgress,
-       let hintsRemaining = chatService.interviewSession.hintsRemaining {
-      Button {
-        chatService.requestHint()
-      } label: {
-        Label("Hint (\(hintsRemaining) left)", systemImage: "lightbulb")
-          .font(.system(size: 12, weight: .medium))
-          .labelStyle(.titleAndIcon)
-      }
-      .buttonStyle(.plain)
-      .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
-      .disabled(hintsRemaining == 0)
-      .help(hintsRemaining == 0 ? "Hint budget spent" : "Request a hint from the interviewer")
     }
   }
 
@@ -323,7 +308,8 @@ struct MainContentView: View {
             question: chatService.interviewSession.activeQuestion,
             onReviewRequested: { fileName in
               chatService.requestReview(fileName: fileName)
-            }
+            },
+            floatingAccessory: workspaceHintsAccessory
           )
           .opacity(selectedSurface == .workspace ? 1 : 0)
           .allowsHitTesting(selectedSurface == .workspace)
@@ -340,7 +326,8 @@ struct MainContentView: View {
         SessionReportView(
           evaluation: chatService.interviewSession.latestEvaluation,
           notes: chatService.interviewSession.latestNotes,
-          attempt: chatService.interviewSession.activeAttempt
+          attempt: chatService.interviewSession.activeAttempt,
+          isGenerating: isReportGenerationRequested
         )
         .opacity(selectedSurface == .report ? 1 : 0)
         .allowsHitTesting(selectedSurface == .report)
@@ -355,10 +342,20 @@ struct MainContentView: View {
       }
     }
     .onChange(of: chatService.currentSessionId) { _, _ in
+      isReportGenerationRequested = false
+      isWhiteboardCreationRequested = false
       selectedSurface = StudioSurface.defaultSurface(for: chatService.currentMode)
       // Restored sessions with a report jump straight to it.
       if chatService.interviewSession.latestEvaluation != nil {
         selectedSurface = .report
+      }
+    }
+    .onChange(of: chatService.chatViewModel?.isLoading) { wasLoading, isLoading in
+      if isWhiteboardCreationRequested,
+         wasLoading == true,
+         isLoading != true,
+         chatService.currentMCPRenderItems.isEmpty {
+        isWhiteboardCreationRequested = false
       }
     }
   }
@@ -367,13 +364,21 @@ struct MainContentView: View {
   private var whiteboardSurface: some View {
     let items = chatService.currentMCPRenderItems
     if items.isEmpty {
-      ContentUnavailableView {
-        Label("Whiteboard", systemImage: "rectangle.3.group")
-      } description: {
-        Text("When Buddy draws on the shared whiteboard (via an MCP app like excalidraw), the diagram renders here.")
+      if chatService.currentMode == .systemDesign {
+        SystemDesignWhiteboardEmptyView(
+          isCreatingWhiteboard: isWhiteboardCreationRequested,
+          onContinueInChat: continueSystemDesignInChat,
+          onCreateWhiteboard: createSystemDesignWhiteboard
+        )
+      } else {
+        ContentUnavailableView {
+          Label("Whiteboard", systemImage: "rectangle.3.group")
+        } description: {
+          Text("When Buddy draws on the shared whiteboard (via an MCP app like excalidraw), the diagram renders here.")
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(EaselDesignSystem.Palette.canvas(for: colorScheme))
       }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(EaselDesignSystem.Palette.canvas(for: colorScheme))
     } else {
       MCPAppSidePanelView(
         items: items,
@@ -403,18 +408,6 @@ struct MainContentView: View {
 
       Spacer()
 
-      if let mode = chatService.currentMode,
-         chatService.interviewSession.activeAttempt?.status == .inProgress {
-        TimerPillView(
-          timer: chatService.sessionTimer,
-          mode: mode,
-          onEndAndGrade: {
-            selectedSurface = .report
-            Task { await chatService.endAndGrade() }
-          }
-        )
-      }
-
       #if DEBUG
         if chatService.currentWorkingDirectory != nil {
           CanvasProjectTokenBadge(summary: chatService.currentWorkspaceUsageSummary)
@@ -439,6 +432,16 @@ struct MainContentView: View {
           .truncationMode(.middle)
           .help(currentWorkingDirectory)
       }
+
+      if let mode = chatService.currentMode,
+         chatService.interviewSession.activeAttempt?.status == .inProgress {
+        TimerPillView(
+          timer: chatService.sessionTimer,
+          mode: mode,
+          onEndAndGrade: endAndGrade
+        )
+        .layoutPriority(1)
+      }
     }
     .padding(.leading, studioToolbarLeadingPadding)
     .padding(.trailing, 16)
@@ -454,6 +457,24 @@ struct MainContentView: View {
     panelLayoutState.showsChatPanel ? 16 : windowControlLeadingReserve
   }
 
+  private var workspaceHintsAccessory: AnyView? {
+    guard selectedSurface == .workspace,
+          let mode = chatService.currentMode,
+          chatService.interviewSession.activeAttempt?.status == .inProgress else {
+      return nil
+    }
+
+    return AnyView(
+      FloatingHintsButton(
+        question: chatService.interviewSession.activeQuestion,
+        attempt: chatService.interviewSession.activeAttempt,
+        mode: mode,
+        hintsRemaining: chatService.interviewSession.hintsRemaining,
+        onRequestHint: chatService.requestHint
+      )
+    )
+  }
+
   private var studioWidthButtonTitle: String {
     panelLayoutState.isCanvasFullWidth ? "Restore Side Panels" : "Expand Panel Full Width"
   }
@@ -462,6 +483,31 @@ struct MainContentView: View {
     panelLayoutState.isCanvasFullWidth
       ? "arrow.down.right.and.arrow.up.left"
       : "arrow.up.left.and.arrow.down.right"
+  }
+
+  private func endAndGrade() {
+    isReportGenerationRequested = true
+    selectedSurface = .report
+    Task {
+      await chatService.endAndGrade()
+    }
+  }
+
+  private func continueSystemDesignInChat() {
+    if !panelLayoutState.showsChatPanel {
+      setPanelLayoutState(.chatPanelRestored)
+    }
+
+    isChatInputFocusRequested = false
+    Task { @MainActor in
+      await Task.yield()
+      isChatInputFocusRequested = true
+    }
+  }
+
+  private func createSystemDesignWhiteboard() {
+    isWhiteboardCreationRequested = true
+    chatService.requestWhiteboard()
   }
 }
 

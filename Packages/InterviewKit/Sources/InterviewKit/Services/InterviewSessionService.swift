@@ -120,6 +120,23 @@ public final class InterviewSessionService {
     latestNotes = []
   }
 
+  /// Deletes the attempt linked to a chat session, including its managed
+  /// workspace and dependent evaluation records.
+  public func deleteAttempt(forChatSessionId chatSessionId: String) async throws {
+    guard let attempt = try await storage.attempt(forChatSessionId: chatSessionId) else {
+      return
+    }
+
+    if let workspacePath = attempt.workspacePath {
+      try workspaceManager.deleteWorkspace(atPath: workspacePath)
+    }
+    try await storage.deleteAttempt(id: attempt.id)
+
+    if activeAttempt?.id == attempt.id {
+      clearActiveAttempt()
+    }
+  }
+
   // MARK: - Restore
 
   /// Sidebar restore: selecting a chat session re-activates its attempt.

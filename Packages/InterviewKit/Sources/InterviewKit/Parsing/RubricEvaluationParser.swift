@@ -3,7 +3,7 @@
 //  InterviewKit
 //
 //  Contract (verbatim in prompts):
-//  {"schema":"buddy-eval/v1","overall_score":72,"verdict":"lean_hire",
+//  {"schema":"buddy-eval/v1","overall_score":72,
 //   "dimensions":[{"id":"correctness","score":7,"max":10,"comment":"..."}],
 //   "summary_markdown":"...",
 //   "improvement_notes":[{"topic":"dynamic-programming","note":"..."}]}
@@ -40,7 +40,6 @@ public enum RubricEvaluationParser {
     let evaluation = RubricEvaluation(
       attemptId: attemptId,
       overallScore: min(100, max(0, overallScore)),
-      verdict: object["verdict"] as? String,
       summaryMarkdown: summaryMarkdown,
       dimensionScores: dimensions,
       rawJSON: block

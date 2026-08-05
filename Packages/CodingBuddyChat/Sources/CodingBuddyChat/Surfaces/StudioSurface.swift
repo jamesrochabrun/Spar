@@ -8,8 +8,8 @@ import InterviewKit
 
 /// Right-panel surfaces. Availability and the default surface derive from the
 /// active session's mode. Coding modes default to the workspace (the problem
-/// statement is embedded there); the hints surface carries strategy guidance
-/// and the hint budget.
+/// statement is embedded there) and expose hints from a floating editor
+/// popover. Non-coding modes can still use the dedicated hints surface.
 public enum StudioSurface: String, CaseIterable, Identifiable {
   case workspace   // SourceCodeEditorView over the attempt workspace dir, problem embedded
   case hints       // strategy guidance, hint budget, question recap
@@ -43,7 +43,7 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
     case .behavioral:
       return [.hints, .report]
     case .mockInterview, .drill, .practice, nil:
-      return [.workspace, .hints, .whiteboard, .report]
+      return [.workspace, .whiteboard, .report]
     }
   }
 

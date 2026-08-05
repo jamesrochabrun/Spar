@@ -81,6 +81,48 @@ final class CodexChatRuntimeStreamingTests: XCTestCase {
     XCTAssertEqual(usage.reasoningOutputTokens, 25)
   }
 
+  @MainActor
+  func testMCPToolUsePreservesServerIdentityFromRawEvent() throws {
+    let store = MessageStore()
+    let sessionManager = SessionManager(sessionStorage: NoOpSessionStorage())
+    let runtime = CodexChatRuntime(
+      messageDisplay: store,
+      sessionManager: sessionManager,
+      workingDirectory: "/tmp/easel",
+      onSessionChange: nil
+    )
+    let state = CodexChatRuntime.StreamState(
+      messageId: UUID(),
+      firstMessageInSession: nil
+    )
+    var capturedID: String?
+    var capturedName: String?
+    var capturedArguments: String?
+    runtime.onMCPToolUse = { id, name, arguments in
+      capturedID = id
+      capturedName = name
+      capturedArguments = arguments
+    }
+
+    runtime.process(try decodeEvent("""
+      {"type":"item.started","item":{"id":"item-1","type":"mcp_tool_call","server":"excalidraw","tool":"create_view","arguments":{"elements":"[]"},"status":"in_progress"}}
+      """), state: state)
+
+    XCTAssertEqual(capturedID, "item-1")
+    XCTAssertEqual(capturedName, "excalidraw__create_view")
+    XCTAssertEqual(capturedArguments, #"{"elements":"[]"}"#)
+  }
+
+  func testMCPToolNameFallsBackWhenServerIsAbsent() {
+    XCTAssertEqual(
+      CodexChatRuntime.qualifiedMCPToolName(
+        fallbackToolName: "create_view",
+        rawLine: #"{"type":"item.started","item":{"tool":"create_view"}}"#
+      ),
+      "create_view"
+    )
+  }
+
   private func decodeEvent(_ json: String) throws -> CodexJSONEvent {
     let decoder = JSONDecoder()
     decoder.keyDecodingStrategy = .convertFromSnakeCase

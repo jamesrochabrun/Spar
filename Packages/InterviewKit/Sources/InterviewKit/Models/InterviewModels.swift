@@ -54,6 +54,43 @@ public enum SessionMode: String, Codable, CaseIterable, Sendable, Identifiable {
   }
 }
 
+/// Engineering track the interviewer targets. Every session mode reads this:
+/// it steers question framing, topic slugs, language hints, and grading
+/// emphasis via the specialization prompt factory in CodingBuddyChat.
+public enum InterviewSpecialization: String, Codable, CaseIterable, Sendable, Identifiable {
+  case general
+  case iOS = "ios"
+
+  /// App-wide default until more tracks ship.
+  public static let `default`: InterviewSpecialization = .iOS
+
+  public var id: String { rawValue }
+
+  public var displayName: String {
+    switch self {
+    case .general: return "Generalist"
+    case .iOS: return "iOS Engineer"
+    }
+  }
+
+  public var systemImage: String {
+    switch self {
+    case .general: return "chevron.left.forwardslash.chevron.right"
+    case .iOS: return "iphone"
+    }
+  }
+
+  /// One-line description shown under the settings picker.
+  public var summary: String {
+    switch self {
+    case .general:
+      return "Classic questions with no domain slant"
+    case .iOS:
+      return "Algorithms framed in iOS terms, Swift pop quizzes, mobile system design"
+    }
+  }
+}
+
 public enum Difficulty: String, Codable, CaseIterable, Sendable, Identifiable {
   case easy, medium, hard
 
@@ -154,7 +191,6 @@ public struct RubricEvaluation: Identifiable, Codable, Equatable, Sendable {
   public var attemptId: String
   public var createdAt: Date
   public var overallScore: Double          // 0–100
-  public var verdict: String?              // "strong_hire" | "hire" | "lean_hire" | "no_hire"
   public var summaryMarkdown: String
   public var dimensionScores: [DimensionScore]
   public var rawJSON: String               // full buddy-eval payload, future-proofing
@@ -164,7 +200,6 @@ public struct RubricEvaluation: Identifiable, Codable, Equatable, Sendable {
     attemptId: String,
     createdAt: Date = Date(),
     overallScore: Double,
-    verdict: String? = nil,
     summaryMarkdown: String,
     dimensionScores: [DimensionScore] = [],
     rawJSON: String
@@ -173,7 +208,6 @@ public struct RubricEvaluation: Identifiable, Codable, Equatable, Sendable {
     self.attemptId = attemptId
     self.createdAt = createdAt
     self.overallScore = overallScore
-    self.verdict = verdict
     self.summaryMarkdown = summaryMarkdown
     self.dimensionScores = dimensionScores
     self.rawJSON = rawJSON

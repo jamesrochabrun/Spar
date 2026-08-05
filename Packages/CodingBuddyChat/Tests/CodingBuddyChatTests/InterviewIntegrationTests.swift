@@ -89,7 +89,7 @@ struct InterviewIntegrationTests {
       Great session. Here's my assessment:
 
       ```buddy-eval
-      {"schema":"buddy-eval/v1","overall_score":78,"verdict":"hire",
+      {"schema":"buddy-eval/v1","overall_score":78,
        "dimensions":[{"id":"correctness","score":8,"max":10,"comment":"Clean"},
                      {"id":"complexity_analysis","score":7,"max":10}],
        "summary_markdown":"Solid hash-map solution.",
@@ -108,7 +108,6 @@ struct InterviewIntegrationTests {
     #expect(storedAttempt.questionId == savedQuestion.id)
 
     let evaluation = try #require(try await storage.evaluation(forAttemptId: attempt.id))
-    #expect(evaluation.verdict == "hire")
     #expect(evaluation.dimensionScores.count == 2)
 
     let notes = try await storage.openImprovementNotes()
@@ -116,6 +115,33 @@ struct InterviewIntegrationTests {
 
     let stats = try await storage.topicSkillStats()
     #expect(stats.contains { $0.topicId == "hash-maps" && $0.attemptCount == 1 })
+  }
+
+  @Test
+  func deletingSessionRemovesLinkedAttemptAndWorkspace() async throws {
+    let (service, storage, root) = makeService()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let attempt = try await service.interviewSession.beginAttempt(
+      mode: .practice,
+      provider: "codex"
+    )
+    await service.interviewSession.linkChatSession("session-to-delete")
+    let workspacePath = try #require(attempt.workspacePath)
+    let workspaceURL = URL(fileURLWithPath: workspacePath, isDirectory: true)
+    #expect(FileManager.default.fileExists(atPath: workspaceURL.path))
+
+    await service.deleteSession(StoredSession(
+      id: "session-to-delete",
+      createdAt: .now,
+      firstUserMessage: "Practice",
+      lastAccessedAt: .now,
+      workingDirectory: workspacePath,
+      provider: .codex
+    ))
+
+    #expect(!FileManager.default.fileExists(atPath: workspaceURL.path))
+    #expect(try await storage.attempt(id: attempt.id) == nil)
   }
 
   @Test

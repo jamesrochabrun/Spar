@@ -15,6 +15,7 @@ public protocol InterviewStorageProtocol: Sendable {
   func attempts(limit: Int?) async throws -> [InterviewAttempt]
   func attempt(id: String) async throws -> InterviewAttempt?
   func attempt(forChatSessionId: String) async throws -> InterviewAttempt?
+  func deleteAttempt(id: String) async throws
   func saveEvaluation(_ e: RubricEvaluation, notes: [ImprovementNote]) async throws
   func evaluation(forAttemptId: String) async throws -> RubricEvaluation?
   func openImprovementNotes() async throws -> [ImprovementNote]
