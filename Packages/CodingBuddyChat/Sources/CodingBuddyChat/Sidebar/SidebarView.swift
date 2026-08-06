@@ -13,19 +13,23 @@ public struct SidebarView: View {
   @Bindable var sidebarViewModel: SidebarViewModel
   private let reservesWindowControls: Bool
   private let newSessionSheetProvider: () -> AnyView
+  private let knowledgeLibrarySheetProvider: () -> AnyView
 
   @State private var showDeleteSessionConfirmation = false
+  @State private var isKnowledgeLibraryPresented = false
   @State private var sessionToDelete: StoredSession?
   @Environment(\.colorScheme) private var colorScheme
 
   public init(
     sidebarViewModel: SidebarViewModel,
     reservesWindowControls: Bool = false,
-    newSessionSheetProvider: @escaping () -> AnyView
+    newSessionSheetProvider: @escaping () -> AnyView,
+    knowledgeLibrarySheetProvider: @escaping () -> AnyView
   ) {
     self.sidebarViewModel = sidebarViewModel
     self.reservesWindowControls = reservesWindowControls
     self.newSessionSheetProvider = newSessionSheetProvider
+    self.knowledgeLibrarySheetProvider = knowledgeLibrarySheetProvider
   }
 
   public var body: some View {
@@ -64,6 +68,9 @@ public struct SidebarView: View {
     .sheet(isPresented: $sidebarViewModel.isNewSessionSheetPresented) {
       newSessionSheetProvider()
     }
+    .sheet(isPresented: $isKnowledgeLibraryPresented) {
+      knowledgeLibrarySheetProvider()
+    }
     .task {
       await sidebarViewModel.loadSessions()
     }
@@ -85,6 +92,15 @@ public struct SidebarView: View {
         .lineLimit(1)
 
       Spacer()
+
+      Button("Study Spaces", systemImage: "books.vertical") {
+        isKnowledgeLibraryPresented = true
+      }
+      .labelStyle(.iconOnly)
+      .font(.system(size: 13, weight: .medium))
+      .buttonStyle(.plain)
+      .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+      .help("Study Spaces")
 
       Button(
         "Dashboard",

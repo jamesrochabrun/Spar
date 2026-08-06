@@ -20,6 +20,17 @@ struct SessionSurfacePresentationTests {
   }
 
   @Test
+  func sourceBackedSessionsAddSourcesWithoutChangingExistingDefaults() {
+    let regular = StudioSurface.available(for: .mockInterview)
+    let grounded = StudioSurface.available(for: .mockInterview, includesSources: true)
+
+    #expect(!regular.contains(.sources))
+    #expect(grounded.first == .sources)
+    #expect(grounded.contains(.workspace))
+    #expect(StudioSurface.defaultSurface(for: .practice, prefersSources: true) == .sources)
+  }
+
+  @Test
   func awaitingEvaluationShowsGradingProgress() {
     let presentation = SessionReportPresentation.resolve(
       hasEvaluation: false,

@@ -58,6 +58,11 @@ public final class ChatViewModel {
   /// Optional hidden context supplied by an embedding app when runtime context is omitted.
   @ObservationIgnored public var outgoingHiddenContextProvider: (() -> String?)?
 
+  /// Optional asynchronous context augmenter invoked with each outgoing user
+  /// message. Embedding apps use this for query-specific retrieval that must
+  /// finish before the provider request begins.
+  @ObservationIgnored public var outgoingContextAugmenter: (@MainActor (String) async -> String?)?
+
   /// Called when an assistant turn finishes, for any provider. Passes the
   /// current session id and the last completed assistant message so embedding
   /// apps can post-process transcript content (dedupe on message id — the
@@ -708,20 +713,6 @@ EOF
     
     // Build message content for display (just the user's text)
     let displayContent = text
-    let apiContent = makeOutgoingAPIContent(
-      text: text,
-      context: context,
-      hiddenContext: hiddenContext,
-      attachments: attachments
-    )
-
-    #if DEBUG
-    if activeProvider == .codex,
-       ProcessInfo.processInfo.environment["EASEL_DEBUG_CODEX_PROMPT"] == "1" {
-      debugPrintCodexPrompt(apiContent)
-    }
-    #endif
-
     // Add user message with code selections and attachments for UI display
     let userMessage = MessageFactory.userMessage(content: displayContent, codeSelections: codeSelections, attachments: attachments)
     messageStore.addMessage(userMessage)
@@ -747,6 +738,25 @@ EOF
     // Start conversation
     let task = Task {
       do {
+        let augmentedContext = await outgoingContextAugmenter?(text)
+        let combinedOutgoingContext = joinedHiddenContexts([
+          hiddenContext,
+          augmentedContext,
+        ])
+        let apiContent = makeOutgoingAPIContent(
+          text: text,
+          context: context,
+          hiddenContext: combinedOutgoingContext,
+          attachments: attachments
+        )
+
+        #if DEBUG
+        if activeProvider == .codex,
+           ProcessInfo.processInfo.environment["EASEL_DEBUG_CODEX_PROMPT"] == "1" {
+          debugPrintCodexPrompt(apiContent)
+        }
+        #endif
+
         try await sendRuntimeMessage(prompt: apiContent, messageId: assistantId)
       } catch {
         // A turn cancelled by a workspace/session switch must not post an error

@@ -37,7 +37,10 @@ struct MainContentView: View {
         SidebarView(
           sidebarViewModel: sidebarVM,
           reservesWindowControls: true,
-          newSessionSheetProvider: { AnyView(newSessionSheet(for: sidebarVM)) }
+          newSessionSheetProvider: { AnyView(newSessionSheet(for: sidebarVM)) },
+          knowledgeLibrarySheetProvider: {
+            AnyView(KnowledgeLibraryView(library: chatService.knowledgeLibrary))
+          }
         )
         .frame(width: sidebarWidth)
           .frame(maxHeight: .infinity)
@@ -113,7 +116,10 @@ struct MainContentView: View {
       }
       vm.onStartSession = { request in
         isReportGenerationRequested = false
-        selectedSurface = StudioSurface.defaultSurface(for: request.mode)
+        selectedSurface = StudioSurface.defaultSurface(
+          for: request.mode,
+          prefersSources: request.prefersSourcesAsDefault
+        )
         Task {
           await chatService.initialize()
           await chatService.startNewSession(request)
@@ -224,6 +230,7 @@ struct MainContentView: View {
       defaultProvider: chatService.globalPreferences?.chatProvider ?? .claude,
       specialization: chatService.interviewSettings.specialization,
       isModeSelectionLocked: sidebarVM.isNewSessionModeSelectionLocked,
+      knowledgeLibrary: chatService.knowledgeLibrary,
       onStart: { request in
         sidebarVM.isNewSessionSheetPresented = false
         sidebarVM.preparePendingNewSession(mode: request.mode, workingDirectory: nil)
@@ -275,7 +282,18 @@ struct MainContentView: View {
   }
 
   private var availableSurfaces: [StudioSurface] {
-    StudioSurface.available(for: chatService.currentMode)
+    StudioSurface.available(
+      for: chatService.currentMode,
+      includesSources: shouldExposeKnowledgeSources
+    )
+  }
+
+  private var shouldExposeKnowledgeSources: Bool {
+    guard chatService.currentKnowledgeStudySpaceID != nil else {
+      return false
+    }
+    return chatService.currentKnowledgeSourcesAreOpen ||
+      chatService.interviewSession.activeAttempt?.status == .evaluated
   }
 
   private var studioSurfacePanel: some View {
@@ -289,6 +307,15 @@ struct MainContentView: View {
       // Same ZStack + opacity/hit-testing switching as Easel's canvas panel:
       // surfaces stay alive (editor buffers, whiteboard web view) while hidden.
       ZStack {
+        KnowledgeSourcesView(
+          library: chatService.knowledgeLibrary,
+          studySpaceID: chatService.currentKnowledgeStudySpaceID,
+          isLocked: !shouldExposeKnowledgeSources
+        )
+        .opacity(selectedSurface == .sources ? 1 : 0)
+        .allowsHitTesting(selectedSurface == .sources)
+        .accessibilityHidden(selectedSurface != .sources)
+
         HintsView(
           question: chatService.interviewSession.activeQuestion,
           attempt: chatService.interviewSession.activeAttempt,
@@ -337,17 +364,36 @@ struct MainContentView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onChange(of: chatService.currentMode) { _, newMode in
-      if !StudioSurface.available(for: newMode).contains(selectedSurface) {
-        selectedSurface = StudioSurface.defaultSurface(for: newMode)
+      if !availableSurfaces.contains(selectedSurface) {
+        selectedSurface = StudioSurface.defaultSurface(
+          for: newMode,
+          prefersSources: chatService.currentKnowledgeActivityIsLearning
+        )
       }
     }
     .onChange(of: chatService.currentSessionId) { _, _ in
       isReportGenerationRequested = false
       isWhiteboardCreationRequested = false
-      selectedSurface = StudioSurface.defaultSurface(for: chatService.currentMode)
+      selectedSurface = StudioSurface.defaultSurface(
+        for: chatService.currentMode,
+        prefersSources: chatService.currentKnowledgeActivityIsLearning
+      )
       // Restored sessions with a report jump straight to it.
       if chatService.interviewSession.latestEvaluation != nil {
         selectedSurface = .report
+      }
+    }
+    .onChange(of: chatService.currentKnowledgeStudySpaceID) { _, _ in
+      if !availableSurfaces.contains(selectedSurface) {
+        selectedSurface = StudioSurface.defaultSurface(
+          for: chatService.currentMode,
+          prefersSources: chatService.currentKnowledgeActivityIsLearning
+        )
+      }
+    }
+    .onChange(of: chatService.knowledgeLibrary.selectedChunkID) { _, chunkID in
+      if chunkID != nil, shouldExposeKnowledgeSources {
+        selectedSurface = .sources
       }
     }
     .onChange(of: chatService.chatViewModel?.isLoading) { wasLoading, isLoading in
@@ -384,9 +430,9 @@ struct MainContentView: View {
         items: items,
         host: chatService.mcpApps,
         onDismiss: {
-          selectedSurface = StudioSurface.defaultSurface(for: chatService.currentMode) == .whiteboard
+          selectedSurface = currentDefaultSurface == .whiteboard
             ? .hints
-            : StudioSurface.defaultSurface(for: chatService.currentMode)
+            : currentDefaultSurface
         },
         isEmbedded: true
       )
@@ -477,6 +523,13 @@ struct MainContentView: View {
 
   private var studioWidthButtonTitle: String {
     panelLayoutState.isCanvasFullWidth ? "Restore Side Panels" : "Expand Panel Full Width"
+  }
+
+  private var currentDefaultSurface: StudioSurface {
+    StudioSurface.defaultSurface(
+      for: chatService.currentMode,
+      prefersSources: chatService.currentKnowledgeActivityIsLearning
+    )
   }
 
   private var studioWidthButtonSystemImage: String {

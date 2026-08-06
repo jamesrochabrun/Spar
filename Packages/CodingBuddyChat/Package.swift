@@ -16,6 +16,7 @@ let package = Package(
   dependencies: [
     .package(path: "../CodingBuddyKit"),
     .package(path: "../InterviewKit"),
+    .package(path: "../KnowledgeKit"),
     .package(path: "../BuddyMCPUI"),
     .package(url: "https://github.com/jamesrochabrun/ClaudeCodeSDK", exact: "1.2.4"),
     .package(path: "../CodingBuddyClaudeCodeUI"),
@@ -31,6 +32,7 @@ let package = Package(
       dependencies: [
         "CodingBuddyKit",
         .product(name: "InterviewKit", package: "InterviewKit"),
+        .product(name: "KnowledgeKit", package: "KnowledgeKit"),
         .product(name: "BuddyMCPUI", package: "BuddyMCPUI"),
         .product(name: "BuddyMCPApps", package: "BuddyMCPUI"),
         .product(name: "ClaudeCodeSDK", package: "ClaudeCodeSDK"),
@@ -51,6 +53,7 @@ let package = Package(
         "CodingBuddyChat",
         "CodingBuddyKit",
         .product(name: "InterviewKit", package: "InterviewKit"),
+        .product(name: "KnowledgeKit", package: "KnowledgeKit"),
         .product(name: "BuddyMCPUI", package: "BuddyMCPUI"),
         .product(name: "BuddyMCPApps", package: "BuddyMCPUI"),
         .product(name: "ClaudeCodeCore", package: "CodingBuddyClaudeCodeUI"),

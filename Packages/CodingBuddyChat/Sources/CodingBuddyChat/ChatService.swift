@@ -14,6 +14,7 @@ import ClaudeCodeSDK
 import CodingBuddyKit
 import Foundation
 import InterviewKit
+import KnowledgeKit
 import OSLog
 
 private let chatLog = Logger(subsystem: "com.codingbuddy.chat", category: "ChatService")
@@ -24,6 +25,7 @@ struct ChatSessionContext {
   let reference: ChatViewModelReference
   let mode: SessionMode
   let specialization: InterviewSpecialization
+  let knowledgeConfiguration: KnowledgeSessionConfiguration?
   let mcpContextKey: String
 }
 
@@ -66,12 +68,25 @@ public final class ChatService: ChatServiceProtocol {
   public let skillStats: SkillStatsService
   public let sessionTimer = SessionTimer()
   public let mcpApps: MCPAppSessionService
+  public let knowledgeLibrary: KnowledgeLibraryService
   /// Interview preferences (specialization track). Read at session-context
   /// creation, so a settings change applies to the next session started.
   public let interviewSettings: BuddyInterviewSettings
 
   /// Mode of the currently visible session, driving surface availability.
   public var currentMode: SessionMode? { activeSessionContext?.mode }
+  public var currentKnowledgeConfiguration: KnowledgeSessionConfiguration? {
+    activeSessionContext?.knowledgeConfiguration
+  }
+  public var currentKnowledgeStudySpaceID: String? {
+    currentKnowledgeConfiguration?.studySpaceID
+  }
+  public var currentKnowledgeActivityIsLearning: Bool {
+    currentKnowledgeConfiguration?.activity == .learn
+  }
+  public var currentKnowledgeSourcesAreOpen: Bool {
+    currentKnowledgeConfiguration?.sourceAccess == .openBook
+  }
 
   /// On-device MLX model management, shared by the chat runtime and the
   /// settings download UI. One instance app-wide — the loaded model is the
@@ -127,6 +142,7 @@ public final class ChatService: ChatServiceProtocol {
     interviewStorage: (any InterviewStorageProtocol)? = nil,
     workspaceManager: (any InterviewWorkspaceManaging)? = nil,
     interviewSettings: BuddyInterviewSettings? = nil,
+    knowledgeLibrary: KnowledgeLibraryService? = nil,
     persistentPreferencesManager: PersistentPreferencesManager? = nil,
     mcpToolsDiscovery: MCPToolsDiscoveryService = MCPToolsDiscoveryService(),
     logger: ClaudeCodeLogger = ClaudeCodeLogger()
@@ -135,6 +151,7 @@ public final class ChatService: ChatServiceProtocol {
     self.sessionStorage = sessionStorage
     self.interviewStorage = resolvedInterviewStorage
     self.interviewSettings = interviewSettings ?? BuddyInterviewSettings()
+    self.knowledgeLibrary = knowledgeLibrary ?? KnowledgeLibraryService()
     self.interviewSession = InterviewSessionService(
       storage: resolvedInterviewStorage,
       workspaceManager: workspaceManager ?? InterviewWorkspaceManager()
@@ -178,6 +195,7 @@ public final class ChatService: ChatServiceProtocol {
     defer { isInitializing = false }
 
     do {
+      await knowledgeLibrary.load()
       let globalPrefs = GlobalPreferencesStorage(
         persistentManager: persistentPreferencesManager,
         logger: logger
@@ -212,6 +230,19 @@ public final class ChatService: ChatServiceProtocol {
     sendMessageToViewModel(text, context: context, hiddenContext: hiddenContext)
   }
 
+  public func openKnowledgeCitation(_ url: URL) -> Bool {
+    guard url.scheme == "codingbuddy-source",
+          url.host == "chunk" else {
+      return false
+    }
+    let chunkID = url.pathComponents.last ?? ""
+    guard !chunkID.isEmpty else { return false }
+    Task {
+      await knowledgeLibrary.selectChunk(id: chunkID)
+    }
+    return true
+  }
+
   // MARK: - Interview session lifecycle
 
   public struct NewSessionRequest {
@@ -222,6 +253,10 @@ public final class ChatService: ChatServiceProtocol {
     public var durationSeconds: Int?
     public var hintBudget: Int
     public var provider: ChatProvider?
+    public var knowledgeConfiguration: KnowledgeSessionConfiguration?
+    public var prefersSourcesAsDefault: Bool {
+      knowledgeConfiguration?.activity == .learn
+    }
 
     public init(
       mode: SessionMode,
@@ -230,7 +265,8 @@ public final class ChatService: ChatServiceProtocol {
       difficulty: Difficulty? = nil,
       durationSeconds: Int? = nil,
       hintBudget: Int = 3,
-      provider: ChatProvider? = nil
+      provider: ChatProvider? = nil,
+      knowledgeConfiguration: KnowledgeSessionConfiguration? = nil
     ) {
       self.mode = mode
       self.question = question
@@ -239,6 +275,7 @@ public final class ChatService: ChatServiceProtocol {
       self.durationSeconds = durationSeconds
       self.hintBudget = hintBudget
       self.provider = provider
+      self.knowledgeConfiguration = knowledgeConfiguration
     }
   }
 
@@ -272,7 +309,11 @@ public final class ChatService: ChatServiceProtocol {
 
     let context: ChatSessionContext
     do {
-      context = try makeSessionContext(mode: request.mode, workingDirectory: attempt.workspacePath)
+      context = try makeSessionContext(
+        mode: request.mode,
+        workingDirectory: attempt.workspacePath,
+        knowledgeConfiguration: request.knowledgeConfiguration
+      )
     } catch {
       initError = error
       return
@@ -415,13 +456,20 @@ public final class ChatService: ChatServiceProtocol {
     // Restore the attempt (and its mode) linked to this chat session.
     let restoredAttempt = await interviewSession.restoreAttempt(forChatSessionId: sessionToLoad.id)
     let mode = restoredAttempt?.mode ?? .practice
+    let knowledgeConfiguration = await knowledgeLibrary.sessionConfiguration(
+      chatSessionID: sessionToLoad.id
+    )
 
     let context: ChatSessionContext
     if let existingContext = sessionContextsById[sessionToLoad.id] {
       context = existingContext
     } else {
       do {
-        context = try makeSessionContext(mode: mode, workingDirectory: sessionToLoad.workingDirectory)
+        context = try makeSessionContext(
+          mode: mode,
+          workingDirectory: sessionToLoad.workingDirectory,
+          knowledgeConfiguration: knowledgeConfiguration
+        )
       } catch {
         initError = error
         return
@@ -463,6 +511,7 @@ public final class ChatService: ChatServiceProtocol {
   public func deleteSession(_ session: StoredSession) async {
     do {
       try await interviewSession.deleteAttempt(forChatSessionId: session.id)
+      await knowledgeLibrary.deleteSessionBinding(chatSessionID: session.id)
       try await sessionStorage.deleteSession(id: session.id)
     } catch {
       chatLog.error(
@@ -532,7 +581,8 @@ public final class ChatService: ChatServiceProtocol {
   private func makeSessionContext(
     mode: SessionMode,
     globalPreferences preferences: GlobalPreferencesStorage? = nil,
-    workingDirectory: String? = nil
+    workingDirectory: String? = nil,
+    knowledgeConfiguration: KnowledgeSessionConfiguration? = nil
   ) throws -> ChatSessionContext {
     guard let preferences = preferences ?? globalPreferences else {
       throw ChatServiceError.missingGlobalPreferences
@@ -556,7 +606,11 @@ public final class ChatService: ChatServiceProtocol {
     }
 
     let specialization = interviewSettings.specialization
-    let prefixes = BuddyAgentInstructions.prefixes(for: mode, specialization: specialization)
+    let prefixes = BuddyAgentInstructions.prefixes(
+      for: mode,
+      specialization: specialization,
+      knowledgeConfiguration: knowledgeConfiguration
+    )
 
     let client = try ClaudeCodeClient(configuration: config)
     let reference = ChatViewModelReference()
@@ -594,6 +648,17 @@ public final class ChatService: ChatServiceProtocol {
     viewModel.runtimeHiddenContextProvider = { [weak self, weak viewModel] in
       self?.makeHiddenContext(for: viewModel)
     }
+    viewModel.outgoingContextAugmenter = { [weak self, weak viewModel] query in
+      guard let self,
+            let viewModel,
+            let configuration = self.context(for: viewModel)?.knowledgeConfiguration else {
+        return nil
+      }
+      return await self.knowledgeLibrary.makeContext(
+        configuration: configuration,
+        query: query
+      )
+    }
     viewModel.onAssistantTurnCompleted = { [weak self, weak viewModel] _, message in
       guard let self, let viewModel, self.isVisibleViewModel(viewModel) else { return }
       self.handleAssistantTurnCompleted(message, mode: mode)
@@ -625,6 +690,7 @@ public final class ChatService: ChatServiceProtocol {
       reference: reference,
       mode: mode,
       specialization: specialization,
+      knowledgeConfiguration: knowledgeConfiguration,
       mcpContextKey: mcpContextKey
     )
   }
@@ -726,6 +792,14 @@ public final class ChatService: ChatServiceProtocol {
 
     // Soft-link the chat session into the active attempt row.
     Task { await interviewSession.linkChatSession(sessionId) }
+    if let configuration = context.knowledgeConfiguration {
+      Task {
+        await knowledgeLibrary.saveSessionBinding(
+          chatSessionID: sessionId,
+          configuration: configuration
+        )
+      }
+    }
 
     setCurrentSessionId(sessionId)
     setCurrentWorkingDirectory(viewModel.projectPath)

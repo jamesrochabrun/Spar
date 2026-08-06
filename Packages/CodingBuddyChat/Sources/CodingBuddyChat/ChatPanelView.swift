@@ -55,6 +55,9 @@ public struct ChatPanelView: View {
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
     }
+    .environment(\.openURL, OpenURLAction { url in
+      chatService.openKnowledgeCitation(url) ? .handled : .systemAction
+    })
     .task {
       await chatService.initialize()
     }

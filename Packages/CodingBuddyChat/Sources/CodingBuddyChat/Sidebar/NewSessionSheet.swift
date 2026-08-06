@@ -6,7 +6,9 @@
 import ClaudeCodeCore
 import CodingBuddyKit
 import InterviewKit
+import KnowledgeKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// "+" flow: mode, topic multi-select, difficulty, duration preset, hint
 /// budget, provider, and optional retry-from-bank question.
@@ -17,6 +19,7 @@ public struct NewSessionSheet: View {
   private let defaultProvider: ChatProvider
   private let specialization: InterviewSpecialization
   private let isModeSelectionLocked: Bool
+  @Bindable private var knowledgeLibrary: KnowledgeLibraryService
   private let onStart: (ChatService.NewSessionRequest) -> Void
   private let onCancel: () -> Void
 
@@ -28,6 +31,10 @@ public struct NewSessionSheet: View {
   @State private var hintBudget = 3
   @State private var provider: ChatProvider
   @State private var selectedBankQuestionId: String?
+  @State private var selectedStudySpaceID: String?
+  @State private var knowledgeActivity: KnowledgeActivity
+  @State private var sourceAccess: KnowledgeSourceAccess = .openBook
+  @State private var isRepositoryImporterPresented = false
   @Environment(\.colorScheme) private var colorScheme
 
   private static let durationPresets = [20, 35, 45, 60]
@@ -39,6 +46,7 @@ public struct NewSessionSheet: View {
     defaultProvider: ChatProvider,
     specialization: InterviewSpecialization = .default,
     isModeSelectionLocked: Bool = false,
+    knowledgeLibrary: KnowledgeLibraryService,
     onStart: @escaping (ChatService.NewSessionRequest) -> Void,
     onCancel: @escaping () -> Void
   ) {
@@ -47,12 +55,16 @@ public struct NewSessionSheet: View {
     self.defaultProvider = defaultProvider
     self.specialization = specialization
     self.isModeSelectionLocked = isModeSelectionLocked
+    self.knowledgeLibrary = knowledgeLibrary
     self.onStart = onStart
     self.onCancel = onCancel
     self._mode = State(initialValue: initialMode)
     self._isTimed = State(initialValue: initialMode.isTimedByDefault)
     self._durationMinutes = State(initialValue: initialMode == .drill ? 20 : 35)
     self._provider = State(initialValue: defaultProvider)
+    self._knowledgeActivity = State(
+      initialValue: initialMode == .practice ? .learn : .interview
+    )
   }
 
   public var body: some View {
@@ -61,27 +73,37 @@ public struct NewSessionSheet: View {
 
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
-          modePicker
+          studySpaceSection
 
-          if mode != .behavioral {
-            topicSection
-          } else {
-            behavioralTopicSection
+          if selectedStudySpaceID != nil {
+            activitySection
           }
 
-          if mode != .behavioral && mode != .systemDesign {
-            difficultySection
+          if !isKnowledgeLearning {
+            modePicker
           }
 
-          durationSection
+          if !isKnowledgeLearning {
+            if mode != .behavioral {
+              topicSection
+            } else {
+              behavioralTopicSection
+            }
 
-          if supportsHints {
-            hintSection
+            if mode != .behavioral && mode != .systemDesign {
+              difficultySection
+            }
+
+            durationSection
+
+            if supportsHints {
+              hintSection
+            }
           }
 
           providerSection
 
-          if !relevantBankQuestions.isEmpty {
+          if selectedStudySpaceID == nil && !relevantBankQuestions.isEmpty {
             retrySection
           }
         }
@@ -90,13 +112,39 @@ public struct NewSessionSheet: View {
 
       footer
     }
-    .frame(width: 480, height: 620)
+    .frame(minWidth: 520, idealWidth: 560, minHeight: 620, idealHeight: 720)
     .background(EaselDesignSystem.Palette.surface(for: colorScheme))
     .onChange(of: mode) { _, newMode in
       selectedTopicIds.removeAll()
       selectedBankQuestionId = nil
       isTimed = newMode.isTimedByDefault
       durationMinutes = newMode == .drill ? 20 : 35
+    }
+    .onChange(of: knowledgeActivity) { _, activity in
+      switch activity {
+      case .learn:
+        mode = .practice
+        isTimed = false
+        sourceAccess = .openBook
+      case .interview:
+        if mode == .practice {
+          mode = .mockInterview
+        }
+        isTimed = mode.isTimedByDefault
+      }
+    }
+    .onChange(of: selectedStudySpaceID) { _, studySpaceID in
+      guard studySpaceID != nil else { return }
+      knowledgeActivity = mode == .practice ? .learn : .interview
+    }
+    .fileImporter(
+      isPresented: $isRepositoryImporterPresented,
+      allowedContentTypes: [.folder],
+      allowsMultipleSelection: false,
+      onCompletion: importRepository
+    )
+    .task {
+      await knowledgeLibrary.load()
     }
   }
 
@@ -116,11 +164,124 @@ public struct NewSessionSheet: View {
     }
   }
 
+  private var isKnowledgeLearning: Bool {
+    selectedStudySpaceID != nil && knowledgeActivity == .learn
+  }
+
+  private var studySpaceSection: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack {
+        sectionTitle("Study Space (optional)")
+        Spacer()
+        if knowledgeLibrary.isImporting {
+          ProgressView()
+            .controlSize(.small)
+          Text("Indexing…")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        }
+      }
+
+      Picker("Study Space", selection: $selectedStudySpaceID) {
+        Text("No sources").tag(String?.none)
+        ForEach(readyStudySpaces) { studySpace in
+          Text(studySpace.name).tag(Optional(studySpace.id))
+        }
+      }
+      .labelsHidden()
+
+      HStack {
+        Text("Ground answers and interview questions in a reusable repository index.")
+          .font(.callout)
+          .foregroundStyle(.secondary)
+
+        Spacer()
+
+        Button("Add Repository", systemImage: "folder.badge.plus") {
+          isRepositoryImporterPresented = true
+        }
+        .controlSize(.small)
+        .disabled(knowledgeLibrary.isImporting)
+      }
+
+      if let errorMessage = knowledgeLibrary.errorMessage {
+        Label(errorMessage, systemImage: "exclamationmark.triangle")
+          .font(.callout)
+          .foregroundStyle(EaselDesignSystem.Palette.danger)
+      }
+    }
+  }
+
+  private var readyStudySpaces: [StudySpace] {
+    knowledgeLibrary.studySpaces.filter { studySpace in
+      knowledgeLibrary.sources(studySpaceID: studySpace.id).contains {
+        $0.indexStatus == .ready && $0.chunkCount > 0
+      }
+    }
+  }
+
+  private var activitySection: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      sectionTitle("How do you want to use these sources?")
+
+      HStack(spacing: 10) {
+        ForEach(KnowledgeActivity.allCases) { activity in
+          activityButton(activity)
+        }
+      }
+
+      if knowledgeActivity == .interview {
+        Picker("Source access", selection: $sourceAccess) {
+          ForEach(KnowledgeSourceAccess.allCases) { access in
+            Text(access.displayName).tag(access)
+          }
+        }
+        .pickerStyle(.segmented)
+      }
+    }
+    .disabled(isModeSelectionLocked)
+  }
+
+  private func activityButton(_ activity: KnowledgeActivity) -> some View {
+    let isSelected = knowledgeActivity == activity
+    return Button {
+      knowledgeActivity = activity
+    } label: {
+      VStack(alignment: .leading, spacing: 6) {
+        Label(activity.displayName, systemImage: activity.systemImage)
+          .font(.headline)
+        Text(activity.summary)
+          .font(.callout)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.leading)
+      }
+      .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
+      .padding(12)
+      .background(
+        isSelected
+          ? EaselDesignSystem.Palette.selectedSurface(for: colorScheme)
+          : EaselDesignSystem.Palette.subtleSurface(for: colorScheme),
+        in: RoundedRectangle(cornerRadius: EaselDesignSystem.Radius.control)
+      )
+      .overlay {
+        RoundedRectangle(cornerRadius: EaselDesignSystem.Radius.control)
+          .stroke(
+            isSelected
+              ? EaselDesignSystem.Palette.accent
+              : EaselDesignSystem.Palette.border(for: colorScheme),
+            lineWidth: isSelected ? 2 : 1
+          )
+      }
+    }
+    .buttonStyle(.plain)
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
+  }
+
   private var modePicker: some View {
     VStack(alignment: .leading, spacing: 8) {
-      sectionTitle("Mode")
+      sectionTitle(selectedStudySpaceID == nil ? "Mode" : "Interview format")
       Picker("Mode", selection: $mode) {
-        ForEach(ModeGroup.displayOrder) { mode in
+        ForEach(availableModes) { mode in
           Label(mode.displayName, systemImage: mode.systemImage).tag(mode)
         }
       }
@@ -128,6 +289,13 @@ public struct NewSessionSheet: View {
       .labelsHidden()
       .disabled(isModeSelectionLocked)
     }
+  }
+
+  private var availableModes: [SessionMode] {
+    if selectedStudySpaceID != nil {
+      return ModeGroup.displayOrder.filter { $0 != .practice }
+    }
+    return ModeGroup.displayOrder
   }
 
   private var topicCategories: [String] {
@@ -312,11 +480,12 @@ public struct NewSessionSheet: View {
 
       Spacer()
 
-      Button("Start Session") {
+      Button(startButtonTitle) {
         onStart(makeRequest())
       }
       .keyboardShortcut(.defaultAction)
       .buttonStyle(.borderedProminent)
+      .disabled(knowledgeLibrary.isImporting)
     }
     .padding(.horizontal, 20)
     .frame(height: 60)
@@ -335,8 +504,31 @@ public struct NewSessionSheet: View {
       difficulty: (mode == .behavioral || mode == .systemDesign) ? nil : difficulty,
       durationSeconds: isTimed ? durationMinutes * 60 : nil,
       hintBudget: supportsHints ? hintBudget : 0,
-      provider: provider
+      provider: provider,
+      knowledgeConfiguration: selectedStudySpaceID.map {
+        KnowledgeSessionConfiguration(
+          studySpaceID: $0,
+          activity: knowledgeActivity,
+          sourceAccess: sourceAccess
+        )
+      }
     )
+  }
+
+  private var startButtonTitle: String {
+    guard selectedStudySpaceID != nil else { return "Start Session" }
+    return knowledgeActivity == .learn ? "Start Learning" : "Start Interview"
+  }
+
+  private func importRepository(_ result: Result<[URL], Error>) {
+    guard case .success(let urls) = result, let repositoryURL = urls.first else {
+      return
+    }
+    Task {
+      if let studySpace = await knowledgeLibrary.addRepository(at: repositoryURL) {
+        selectedStudySpaceID = studySpace.id
+      }
+    }
   }
 
   private func sectionTitle(_ text: String) -> some View {

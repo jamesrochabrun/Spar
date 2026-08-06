@@ -5,6 +5,7 @@
 
 import Foundation
 import InterviewKit
+import KnowledgeKit
 import Testing
 @testable import CodingBuddyChat
 
@@ -35,6 +36,39 @@ struct BuddyAgentInstructionsTests {
     #expect(prefixes.claude.contains("[HINT REQUEST]"))
     #expect(prefixes.claude.contains("never confirm correctness") || prefixes.claude.contains("never confirm"))
     #expect(prefixes.claude.contains("speed"))
+  }
+
+  @Test
+  func knowledgeActivitiesAddProviderNeutralGroundingRules() {
+    let learn = KnowledgeSessionConfiguration(
+      studySpaceID: "space",
+      activity: .learn
+    )
+    let closedBookInterview = KnowledgeSessionConfiguration(
+      studySpaceID: "space",
+      activity: .interview,
+      sourceAccess: .closedBook
+    )
+
+    let learnPrefixes = BuddyAgentInstructions.prefixes(
+      for: .practice,
+      knowledgeConfiguration: learn
+    )
+    let interviewPrefixes = BuddyAgentInstructions.prefixes(
+      for: .mockInterview,
+      knowledgeConfiguration: closedBookInterview
+    )
+
+    for prompt in [learnPrefixes.claude, learnPrefixes.codex, learnPrefixes.api] {
+      #expect(prompt.contains("Source-grounded learning session"))
+      #expect(prompt.contains("citation"))
+      #expect(prompt.contains("untrusted"))
+    }
+    for prompt in [interviewPrefixes.claude, interviewPrefixes.codex, interviewPrefixes.api] {
+      #expect(prompt.contains("Source-grounded interview session"))
+      #expect(prompt.contains("closed book"))
+      #expect(prompt.contains("do not reveal source citations"))
+    }
   }
 
   @Test

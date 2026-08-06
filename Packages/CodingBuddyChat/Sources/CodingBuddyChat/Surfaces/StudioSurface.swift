@@ -11,6 +11,7 @@ import InterviewKit
 /// statement is embedded there) and expose hints from a floating editor
 /// popover. Non-coding modes can still use the dedicated hints surface.
 public enum StudioSurface: String, CaseIterable, Identifiable {
+  case sources     // read-only passages retrieved from an active Study Space
   case workspace   // SourceCodeEditorView over the attempt workspace dir, problem embedded
   case hints       // strategy guidance, hint budget, question recap
   case whiteboard  // MCP app surface (excalidraw)
@@ -20,6 +21,7 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
 
   public var displayName: String {
     switch self {
+    case .sources: return "Sources"
     case .workspace: return "Workspace"
     case .hints: return "Hints"
     case .whiteboard: return "Whiteboard"
@@ -29,6 +31,7 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
 
   public var systemImage: String {
     switch self {
+    case .sources: return "books.vertical"
     case .workspace: return "chevron.left.forwardslash.chevron.right"
     case .hints: return "lightbulb"
     case .whiteboard: return "rectangle.3.group"
@@ -36,18 +39,29 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
     }
   }
 
-  public static func available(for mode: SessionMode?) -> [StudioSurface] {
+  public static func available(
+    for mode: SessionMode?,
+    includesSources: Bool = false
+  ) -> [StudioSurface] {
+    let modeSurfaces: [StudioSurface]
     switch mode {
     case .systemDesign:
-      return [.whiteboard, .hints, .report]
+      modeSurfaces = [.whiteboard, .hints, .report]
     case .behavioral:
-      return [.hints, .report]
+      modeSurfaces = [.hints, .report]
     case .mockInterview, .drill, .practice, nil:
-      return [.workspace, .whiteboard, .report]
+      modeSurfaces = [.workspace, .whiteboard, .report]
     }
+    return includesSources ? [.sources] + modeSurfaces : modeSurfaces
   }
 
-  public static func defaultSurface(for mode: SessionMode?) -> StudioSurface {
+  public static func defaultSurface(
+    for mode: SessionMode?,
+    prefersSources: Bool = false
+  ) -> StudioSurface {
+    if prefersSources {
+      return .sources
+    }
     switch mode {
     case .systemDesign: return .whiteboard
     case .behavioral: return .hints
