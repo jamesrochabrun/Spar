@@ -81,9 +81,6 @@ public final class ChatService: ChatServiceProtocol {
   public var currentKnowledgeStudySpaceID: String? {
     currentKnowledgeConfiguration?.studySpaceID
   }
-  public var currentKnowledgeActivityIsLearning: Bool {
-    currentKnowledgeConfiguration?.activity == .learn
-  }
   public var currentKnowledgeSourcesAreOpen: Bool {
     currentKnowledgeConfiguration?.sourceAccess == .openBook
   }
@@ -134,6 +131,9 @@ public final class ChatService: ChatServiceProtocol {
   private var capturedAssistantMessageIds: Set<UUID> = []
   private var evaluationRepairAttempts = 0
   private let maxEvaluationRepairAttempts = 2
+  private var pendingStudyPlanGenerationSpaceIDs: Set<String> = []
+  private var studyPlanRepairAttemptsBySpaceID: [String: Int] = [:]
+  private let maxStudyPlanRepairAttempts = 2
 
   // MARK: - Init
 
@@ -238,12 +238,18 @@ public final class ChatService: ChatServiceProtocol {
     let chunkID = url.pathComponents.last ?? ""
     guard !chunkID.isEmpty else { return false }
     Task {
-      await knowledgeLibrary.selectChunk(id: chunkID)
+      await knowledgeLibrary.openCitation(chunkID: chunkID)
     }
     return true
   }
 
   // MARK: - Interview session lifecycle
+
+  public enum StudyPlanFocus: Equatable, Sendable {
+    case next
+    case random
+    case item(String)
+  }
 
   public struct NewSessionRequest {
     public var mode: SessionMode
@@ -254,9 +260,7 @@ public final class ChatService: ChatServiceProtocol {
     public var hintBudget: Int
     public var provider: ChatProvider?
     public var knowledgeConfiguration: KnowledgeSessionConfiguration?
-    public var prefersSourcesAsDefault: Bool {
-      knowledgeConfiguration?.activity == .learn
-    }
+    public var studyPlanFocus: StudyPlanFocus?
 
     public init(
       mode: SessionMode,
@@ -266,7 +270,8 @@ public final class ChatService: ChatServiceProtocol {
       durationSeconds: Int? = nil,
       hintBudget: Int = 3,
       provider: ChatProvider? = nil,
-      knowledgeConfiguration: KnowledgeSessionConfiguration? = nil
+      knowledgeConfiguration: KnowledgeSessionConfiguration? = nil,
+      studyPlanFocus: StudyPlanFocus? = nil
     ) {
       self.mode = mode
       self.question = question
@@ -276,6 +281,7 @@ public final class ChatService: ChatServiceProtocol {
       self.hintBudget = hintBudget
       self.provider = provider
       self.knowledgeConfiguration = knowledgeConfiguration
+      self.studyPlanFocus = studyPlanFocus
     }
   }
 
@@ -287,6 +293,7 @@ public final class ChatService: ChatServiceProtocol {
 
     await persistVisibleSessionMessages()
     retainCurrentSessionContext()
+    sessionTimer.stop()
 
     if let provider = request.provider, let globalPreferences {
       globalPreferences.chatProvider = provider
@@ -335,9 +342,34 @@ public final class ChatService: ChatServiceProtocol {
 
     // Kick off the interview: the agent presents the question (retry from
     // bank) or generates one for the requested topics.
-    if request.mode != .practice {
+    if request.mode != .practice || request.knowledgeConfiguration?.activity == .learn {
       sendKickoffMessage(for: request)
     }
+  }
+
+  public func startLearning(
+    studySpaceID: String,
+    focus: StudyPlanFocus = .next
+  ) async {
+    if currentKnowledgeConfiguration?.studySpaceID == studySpaceID,
+       currentKnowledgeConfiguration?.activity == .learn,
+       let plan = knowledgeLibrary.studyPlan(studySpaceID: studySpaceID) {
+      sendMessageToViewModel(studyMessage(focus: focus, plan: plan))
+      return
+    }
+
+    await startNewSession(NewSessionRequest(
+      mode: .practice,
+      durationSeconds: nil,
+      hintBudget: 0,
+      provider: globalPreferences?.chatProvider,
+      knowledgeConfiguration: KnowledgeSessionConfiguration(
+        studySpaceID: studySpaceID,
+        activity: .learn,
+        sourceAccess: .openBook
+      ),
+      studyPlanFocus: focus
+    ))
   }
 
   /// Legacy entry point (pre-interview flows): starts an untimed practice session.
@@ -347,6 +379,7 @@ public final class ChatService: ChatServiceProtocol {
 
     await persistVisibleSessionMessages()
     retainCurrentSessionContext()
+    sessionTimer.stop()
 
     let context: ChatSessionContext
     do {
@@ -361,13 +394,31 @@ public final class ChatService: ChatServiceProtocol {
     setCurrentWorkingDirectory(normalized(workingDirectory) ?? context.viewModel.projectPath)
     setCurrentSessionId(nil)
     refreshCurrentWorkspaceUsage()
-    interviewSession.clearActiveAttempt()
-    sessionTimer.stop()
+    await interviewSession.leaveActiveAttempt()
   }
 
   private func sendKickoffMessage(for request: NewSessionRequest) {
     let text: String
-    if let question = request.question {
+    if let configuration = request.knowledgeConfiguration,
+       configuration.activity == .learn {
+      let studySpace = knowledgeLibrary.studySpace(id: configuration.studySpaceID)
+      let existingPlan = knowledgeLibrary.studyPlan(studySpaceID: configuration.studySpaceID)
+      if existingPlan == nil {
+        pendingStudyPlanGenerationSpaceIDs.insert(configuration.studySpaceID)
+        let requestedItemID: String?
+        if case .item(let itemID) = request.studyPlanFocus {
+          requestedItemID = itemID
+        } else {
+          requestedItemID = nil
+        }
+        text = BuddyAgentInstructions.studyPlanGenerationDirective(
+          studySpaceName: studySpace?.name ?? "this repository",
+          requestedItemID: requestedItemID
+        )
+      } else {
+        text = studyMessage(focus: request.studyPlanFocus ?? .next, plan: existingPlan)
+      }
+    } else if let question = request.question {
       text = """
         Let's begin. Use this exact question from my bank (re-emit its \
         buddy-question fence with the same title and prompt):
@@ -380,6 +431,11 @@ public final class ChatService: ChatServiceProtocol {
         """
     } else {
       var constraints: [String] = []
+      if request.knowledgeConfiguration != nil {
+        constraints.append(
+          "Ground the question in the study-space source excerpts provided in context — ask about this repository's actual code, architecture, or design decisions."
+        )
+      }
       if !request.topicIds.isEmpty {
         constraints.append("Topics: \(request.topicIds.joined(separator: ", "))")
       }
@@ -391,6 +447,21 @@ public final class ChatService: ChatServiceProtocol {
         : "Let's begin. Present my first question.\n\(constraints.joined(separator: "\n"))"
     }
     sendMessageToViewModel(text)
+  }
+
+  private func studyMessage(focus: StudyPlanFocus, plan: StudyPlan?) -> String {
+    switch focus {
+    case .next:
+      return BuddyAgentInstructions.nextStudyTopicMessage
+    case .random:
+      let candidates = plan?.items.filter { !$0.isCompleted }
+      let item = candidates?.randomElement() ?? plan?.items.randomElement()
+      return item.map {
+        BuddyAgentInstructions.studyTopicRequestMessage(itemID: $0.id)
+      } ?? BuddyAgentInstructions.randomStudyTopicMessage
+    case .item(let itemID):
+      return BuddyAgentInstructions.studyTopicRequestMessage(itemID: itemID)
+    }
   }
 
   // MARK: - Hints / grading
@@ -444,6 +515,7 @@ public final class ChatService: ChatServiceProtocol {
 
     await persistVisibleSessionMessages()
     retainCurrentSessionContext()
+    sessionTimer.stop()
 
     // Load fresh session data from storage, fall back to the passed object
     let sessionToLoad: StoredSession
@@ -541,7 +613,9 @@ public final class ChatService: ChatServiceProtocol {
     refreshCurrentWorkspaceUsage()
   }
 
-  public func clearActiveWorkspace() {
+  public func clearActiveWorkspace() async {
+    sessionTimer.stop()
+
     let retainedContexts = Array(sessionContextsById.values) + Array(pendingSessionContextsByViewModelId.values)
     for context in retainedContexts {
       if isVisibleViewModel(context.viewModel) { continue }
@@ -555,8 +629,7 @@ public final class ChatService: ChatServiceProtocol {
     chatViewModel?.clearConversation()
     chatViewModel?.setWorkingDirectory("")
     setCurrentWorkingDirectory(nil)
-    interviewSession.clearActiveAttempt()
-    sessionTimer.stop()
+    await interviewSession.leaveActiveAttempt()
   }
 
   // MARK: - Private
@@ -661,7 +734,7 @@ public final class ChatService: ChatServiceProtocol {
     }
     viewModel.onAssistantTurnCompleted = { [weak self, weak viewModel] _, message in
       guard let self, let viewModel, self.isVisibleViewModel(viewModel) else { return }
-      self.handleAssistantTurnCompleted(message, mode: mode)
+      self.handleAssistantTurnCompleted(message, mode: mode, viewModel: viewModel)
     }
 
     let mcpContextKey = UUID().uuidString
@@ -697,7 +770,11 @@ public final class ChatService: ChatServiceProtocol {
 
   // MARK: - Structured block capture
 
-  private func handleAssistantTurnCompleted(_ message: ChatMessage, mode: SessionMode) {
+  private func handleAssistantTurnCompleted(
+    _ message: ChatMessage,
+    mode: SessionMode,
+    viewModel: ChatViewModel
+  ) {
     guard !capturedAssistantMessageIds.contains(message.id) else { return }
     capturedAssistantMessageIds.insert(message.id)
 
@@ -710,6 +787,27 @@ public final class ChatService: ChatServiceProtocol {
 
     var capturedEvaluation = false
     Task { @MainActor in
+      if let configuration = context(for: viewModel)?.knowledgeConfiguration,
+         configuration.activity == .learn {
+        let plans = StudyPlanBlockParser.parseBlocks(
+          in: message.content,
+          studySpaceID: configuration.studySpaceID
+        )
+        if let plan = plans.last {
+          let saved = await knowledgeLibrary.saveGeneratedStudyPlan(plan)
+          if saved {
+            pendingStudyPlanGenerationSpaceIDs.remove(configuration.studySpaceID)
+            studyPlanRepairAttemptsBySpaceID.removeValue(forKey: configuration.studySpaceID)
+          }
+        } else if pendingStudyPlanGenerationSpaceIDs.contains(configuration.studySpaceID) {
+          let repairAttempts = studyPlanRepairAttemptsBySpaceID[configuration.studySpaceID] ?? 0
+          if repairAttempts < maxStudyPlanRepairAttempts {
+            studyPlanRepairAttemptsBySpaceID[configuration.studySpaceID] = repairAttempts + 1
+            sendMessageToViewModel(BuddyAgentInstructions.studyPlanRepairDirective())
+          }
+        }
+      }
+
       for result in results {
         switch result {
         case .question(let captured):

@@ -71,7 +71,7 @@ struct ChatServiceTests {
     await service.initialize()
     await service.startNewSession(workingDirectory: "/tmp/workspace")
 
-    service.clearActiveWorkspace()
+    await service.clearActiveWorkspace()
 
     #expect(service.currentWorkingDirectory == nil)
     #expect(service.currentSessionId == nil)

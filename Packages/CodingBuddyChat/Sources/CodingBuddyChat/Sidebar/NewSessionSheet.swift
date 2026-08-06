@@ -84,7 +84,9 @@ public struct NewSessionSheet: View {
           }
 
           if !isKnowledgeLearning {
-            if mode != .behavioral {
+            if isKnowledgeSession {
+              groundedQuestionNote
+            } else if mode != .behavioral {
               topicSection
             } else {
               behavioralTopicSection
@@ -134,6 +136,10 @@ public struct NewSessionSheet: View {
       }
     }
     .onChange(of: selectedStudySpaceID) { _, studySpaceID in
+      // Grounded sessions draw questions from the repository index, so the
+      // generic topic/bank pickers no longer apply.
+      selectedTopicIds.removeAll()
+      selectedBankQuestionId = nil
       guard studySpaceID != nil else { return }
       knowledgeActivity = mode == .practice ? .learn : .interview
     }
@@ -164,8 +170,37 @@ public struct NewSessionSheet: View {
     }
   }
 
+  private var isKnowledgeSession: Bool {
+    selectedStudySpaceID != nil
+  }
+
   private var isKnowledgeLearning: Bool {
-    selectedStudySpaceID != nil && knowledgeActivity == .learn
+    isKnowledgeSession && knowledgeActivity == .learn
+  }
+
+  private var selectedStudySpace: StudySpace? {
+    knowledgeLibrary.studySpace(id: selectedStudySpaceID)
+  }
+
+  /// Replaces the generic topic chips for grounded interviews: questions come
+  /// from the indexed repository, not from the standard topic catalog.
+  private var groundedQuestionNote: some View {
+    Label {
+      Text(
+        "Questions are drawn from “\(selectedStudySpace?.name ?? "your sources")” — Buddy asks about the repository's real code and design."
+      )
+      .font(.callout)
+      .foregroundStyle(.secondary)
+    } icon: {
+      Image(systemName: "text.book.closed")
+        .foregroundStyle(EaselDesignSystem.Palette.accent)
+    }
+    .padding(12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      EaselDesignSystem.Palette.subtleSurface(for: colorScheme),
+      in: RoundedRectangle(cornerRadius: EaselDesignSystem.Radius.control)
+    )
   }
 
   private var studySpaceSection: some View {
@@ -190,6 +225,12 @@ public struct NewSessionSheet: View {
       }
       .labelsHidden()
 
+      if let selectedStudySpace {
+        Text(indexSummary(for: selectedStudySpace))
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
       HStack {
         Text("Ground answers and interview questions in a reusable repository index.")
           .font(.callout)
@@ -210,6 +251,13 @@ public struct NewSessionSheet: View {
           .foregroundStyle(EaselDesignSystem.Palette.danger)
       }
     }
+  }
+
+  private func indexSummary(for studySpace: StudySpace) -> String {
+    let sources = knowledgeLibrary.sources(studySpaceID: studySpace.id)
+    let files = sources.reduce(0) { $0 + $1.indexedFileCount }
+    let passages = sources.reduce(0) { $0 + $1.chunkCount }
+    return "\(files) files · \(passages) searchable passages"
   }
 
   private var readyStudySpaces: [StudySpace] {
@@ -499,8 +547,8 @@ public struct NewSessionSheet: View {
   private func makeRequest() -> ChatService.NewSessionRequest {
     ChatService.NewSessionRequest(
       mode: mode,
-      question: relevantBankQuestions.first { $0.id == selectedBankQuestionId },
-      topicIds: Array(selectedTopicIds).sorted(),
+      question: isKnowledgeSession ? nil : relevantBankQuestions.first { $0.id == selectedBankQuestionId },
+      topicIds: isKnowledgeSession ? [] : Array(selectedTopicIds).sorted(),
       difficulty: (mode == .behavioral || mode == .systemDesign) ? nil : difficulty,
       durationSeconds: isTimed ? durationMinutes * 60 : nil,
       hintBudget: supportsHints ? hintBudget : 0,

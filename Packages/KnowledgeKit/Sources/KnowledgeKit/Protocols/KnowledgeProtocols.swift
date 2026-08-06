@@ -6,6 +6,17 @@ public protocol KnowledgeStorageProtocol: Sendable {
   func studySpace(id: String) async throws -> StudySpace?
   func deleteStudySpace(id: String) async throws
 
+  func saveStudyPlan(_ studyPlan: StudyPlan) async throws
+  func studyPlans() async throws -> [StudyPlan]
+  func studyPlan(studySpaceID: String) async throws -> StudyPlan?
+  func setStudyPlanItemCompletion(
+    planID: String,
+    itemID: String,
+    isCompleted: Bool,
+    completedAt: Date?
+  ) async throws
+  func deleteStudyPlan(id: String) async throws
+
   func saveSource(_ source: KnowledgeSource) async throws
   func sources(studySpaceID: String) async throws -> [KnowledgeSource]
   func replaceChunks(for sourceID: String, with chunks: [KnowledgeChunk]) async throws

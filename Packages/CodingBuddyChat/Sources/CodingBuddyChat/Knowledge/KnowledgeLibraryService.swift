@@ -4,12 +4,18 @@ import KnowledgeKit
 @Observable @MainActor
 public final class KnowledgeLibraryService {
   public private(set) var studySpaces: [StudySpace] = []
+  public private(set) var studyPlans: [StudyPlan] = []
   public private(set) var sourcesByStudySpaceID: [String: [KnowledgeSource]] = [:]
   public private(set) var latestResults: [KnowledgeSearchResult] = []
   public private(set) var selectedChunk: KnowledgeChunk?
   public var selectedChunkID: String? { selectedChunk?.id }
   public private(set) var isImporting = false
   public private(set) var errorMessage: String?
+  /// Passages retrieved for the most recent outgoing message, kept separate
+  /// from the panel's browse/search state so agent retrieval never stomps
+  /// what the user is looking at.
+  public private(set) var lastRetrieval: [KnowledgeSearchResult] = []
+  public private(set) var lastRetrievalQuery: String?
 
   @ObservationIgnored private let storage: any KnowledgeStorageProtocol
   @ObservationIgnored private let repositoryIndexer: any RepositoryIndexing
@@ -31,6 +37,7 @@ public final class KnowledgeLibraryService {
         sources[space.id] = try await storage.sources(studySpaceID: space.id)
       }
       studySpaces = spaces
+      studyPlans = try await storage.studyPlans()
       sourcesByStudySpaceID = sources
       errorMessage = nil
     } catch {
@@ -69,6 +76,10 @@ public final class KnowledgeLibraryService {
         selectedChunk = nil
         latestResults = []
       }
+      if lastRetrieval.contains(where: { $0.chunk.studySpaceID == studySpace.id }) {
+        lastRetrieval = []
+        lastRetrievalQuery = nil
+      }
       await load()
     } catch {
       errorMessage = error.localizedDescription
@@ -80,6 +91,82 @@ public final class KnowledgeLibraryService {
     return studySpaces.first { $0.id == id }
   }
 
+  public func studyPlan(studySpaceID: String?) -> StudyPlan? {
+    guard let studySpaceID else { return nil }
+    return studyPlans.first { $0.studySpaceID == studySpaceID }
+  }
+
+  @discardableResult
+  public func saveGeneratedStudyPlan(_ studyPlan: StudyPlan) async -> Bool {
+    do {
+      var existing = self.studyPlan(studySpaceID: studyPlan.studySpaceID)
+      if existing == nil {
+        existing = try await storage.studyPlan(studySpaceID: studyPlan.studySpaceID)
+      }
+      let completionByItemID = Dictionary(
+        uniqueKeysWithValues: (existing?.items ?? []).map {
+          ($0.id, ($0.isCompleted, $0.completedAt))
+        }
+      )
+      var mergedPlan = studyPlan
+      mergedPlan.items = studyPlan.items.map { item in
+        var mergedItem = item
+        if let completion = completionByItemID[item.id] {
+          mergedItem.isCompleted = completion.0
+          mergedItem.completedAt = completion.1
+        }
+        return mergedItem
+      }
+      if let existing {
+        mergedPlan = StudyPlan(
+          id: existing.id,
+          studySpaceID: mergedPlan.studySpaceID,
+          title: mergedPlan.title,
+          summary: mergedPlan.summary,
+          items: mergedPlan.items,
+          createdAt: existing.createdAt,
+          updatedAt: .now
+        )
+      }
+      try await storage.saveStudyPlan(mergedPlan)
+      try await reloadStudyPlans()
+      errorMessage = nil
+      return true
+    } catch {
+      errorMessage = error.localizedDescription
+      return false
+    }
+  }
+
+  public func setStudyPlanItemCompletion(
+    planID: String,
+    itemID: String,
+    isCompleted: Bool
+  ) async {
+    do {
+      try await storage.setStudyPlanItemCompletion(
+        planID: planID,
+        itemID: itemID,
+        isCompleted: isCompleted,
+        completedAt: isCompleted ? .now : nil
+      )
+      try await reloadStudyPlans()
+      errorMessage = nil
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  public func deleteStudyPlan(_ studyPlan: StudyPlan) async {
+    do {
+      try await storage.deleteStudyPlan(id: studyPlan.id)
+      try await reloadStudyPlans()
+      errorMessage = nil
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
   public func sources(studySpaceID: String) -> [KnowledgeSource] {
     sourcesByStudySpaceID[studySpaceID] ?? []
   }
@@ -88,16 +175,14 @@ public final class KnowledgeLibraryService {
     do {
       let chunks = try await storage.chunks(studySpaceID: studySpaceID, limit: limit)
       latestResults = chunks.map { KnowledgeSearchResult(chunk: $0, score: 0) }
-      if selectedChunk?.studySpaceID != studySpaceID {
-        selectedChunk = chunks.first
-      }
+      reconcileSelection(studySpaceID: studySpaceID)
       errorMessage = nil
     } catch {
       errorMessage = error.localizedDescription
     }
   }
 
-  public func search(studySpaceID: String, query: String, limit: Int = 20) async {
+  public func search(studySpaceID: String, query: String, limit: Int = 40) async {
     let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedQuery.isEmpty else {
       await browse(studySpaceID: studySpaceID)
@@ -110,10 +195,26 @@ public final class KnowledgeLibraryService {
         query: trimmedQuery,
         limit: limit
       )
-      selectedChunk = latestResults.first?.chunk
+      // An explicit search with no hits clears the preview too — a stale
+      // passage next to "No Results" reads as a wrong match.
+      reconcileSelection(studySpaceID: studySpaceID, clearsWhenEmpty: true)
       errorMessage = nil
     } catch {
       errorMessage = error.localizedDescription
+    }
+  }
+
+  /// Keeps the preview stable while the result list refreshes: the current
+  /// selection survives if it is still listed; otherwise fall back to the
+  /// first result (or clear a selection left over from another space).
+  private func reconcileSelection(studySpaceID: String, clearsWhenEmpty: Bool = false) {
+    if latestResults.contains(where: { $0.chunk.id == selectedChunk?.id }) {
+      return
+    }
+    if let first = latestResults.first?.chunk {
+      selectedChunk = first
+    } else if clearsWhenEmpty || selectedChunk?.studySpaceID != studySpaceID {
+      selectedChunk = nil
     }
   }
 
@@ -124,6 +225,16 @@ public final class KnowledgeLibraryService {
     } catch {
       errorMessage = error.localizedDescription
     }
+  }
+
+  /// Monotonic signal for transcript citation clicks. Unlike plain chunk
+  /// selection (which panel browsing also mutates), observing this lets the
+  /// UI reveal the Sources surface only for explicit citation taps.
+  public private(set) var citationActivationCount = 0
+
+  public func openCitation(chunkID: String) async {
+    await selectChunk(id: chunkID)
+    citationActivationCount += 1
   }
 
   public func makeContext(
@@ -138,12 +249,28 @@ public final class KnowledgeLibraryService {
       return nil
     }
 
-    let retrievalQuery = Self.retrievalQuery(for: query, activity: configuration.activity)
-    let results = (try? await storage.search(
-      studySpaceID: configuration.studySpaceID,
-      query: retrievalQuery,
-      limit: 10
-    )) ?? []
+    var plan = studyPlan(studySpaceID: configuration.studySpaceID)
+    if plan == nil, configuration.activity == .learn {
+      plan = try? await storage.studyPlan(studySpaceID: configuration.studySpaceID)
+    }
+    let retrievalQuery = Self.retrievalQuery(
+      for: query,
+      activity: configuration.activity,
+      plan: plan
+    )
+    let results: [KnowledgeSearchResult]
+    if Self.isStudyPlanGeneration(query) {
+      results = await studyPlanEvidence(
+        studySpaceID: configuration.studySpaceID,
+        query: retrievalQuery
+      )
+    } else {
+      results = (try? await storage.search(
+        studySpaceID: configuration.studySpaceID,
+        query: retrievalQuery,
+        limit: 10
+      )) ?? []
+    }
     let resolvedResults: [KnowledgeSearchResult]
     if results.isEmpty, Self.isGenericKickoff(query) {
       let fallback = (try? await storage.chunks(
@@ -155,17 +282,24 @@ public final class KnowledgeLibraryService {
       resolvedResults = results
     }
 
-    latestResults = resolvedResults
-    if selectedChunk?.studySpaceID != configuration.studySpaceID {
-      selectedChunk = resolvedResults.first?.chunk
-    }
-    return KnowledgeContextBuilder.makeContext(
+    lastRetrieval = resolvedResults
+    lastRetrievalQuery = retrievalQuery
+    let evidenceContext = KnowledgeContextBuilder.makeContext(
       studySpace: studySpace,
       results: resolvedResults,
+      maximumCharacters: Self.isStudyPlanGeneration(query) ? 32_000 : 24_000,
       allowsVisibleCitations: configuration.sourceAccess == .openBook ||
         configuration.activity == .learn ||
         query.localizedCaseInsensitiveContains("[EVALUATE NOW]")
     )
+    guard configuration.activity == .learn else {
+      return evidenceContext
+    }
+
+    guard let plan else { return evidenceContext }
+    return [evidenceContext, StudyPlanContextBuilder.makeContext(plan: plan)]
+      .filter { !$0.isEmpty }
+      .joined(separator: "\n\n")
   }
 
   public func saveSessionBinding(
@@ -188,9 +322,33 @@ public final class KnowledgeLibraryService {
 
   private static func retrievalQuery(
     for query: String,
-    activity: KnowledgeActivity
+    activity: KnowledgeActivity,
+    plan: StudyPlan?
   ) -> String {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    if isStudyPlanGeneration(trimmed) {
+      return """
+        README overview architecture entry point modules packages dependencies \
+        state data flow persistence services tests configuration
+        """
+    }
+    if activity == .learn, let plan {
+      if trimmed.localizedCaseInsensitiveContains("[STUDY PLAN NEXT]"),
+         let item = plan.nextIncompleteItem {
+        return retrievalQuery(for: item)
+      }
+      if let itemID = requestedStudyPlanItemID(in: trimmed),
+         let item = plan.items.first(where: { $0.id == itemID }) {
+        return retrievalQuery(for: item)
+      }
+      if trimmed.localizedCaseInsensitiveContains("[STUDY PLAN RANDOM]") {
+        return plan.items
+          .filter { !$0.isCompleted }
+          .prefix(8)
+          .flatMap { [$0.title] + $0.topics + $0.sourcePaths }
+          .joined(separator: " ")
+      }
+    }
     guard isGenericKickoff(trimmed) else { return trimmed }
 
     switch activity {
@@ -206,5 +364,57 @@ public final class KnowledgeLibraryService {
     return trimmed.isEmpty ||
       trimmed.localizedCaseInsensitiveContains("let's begin") ||
       trimmed.localizedCaseInsensitiveContains("present my first question")
+  }
+
+  private static func isStudyPlanGeneration(_ query: String) -> Bool {
+    query.localizedCaseInsensitiveContains("[CREATE STUDY PLAN]")
+  }
+
+  private static func requestedStudyPlanItemID(in query: String) -> String? {
+    let marker = "[STUDY PLAN ITEM:"
+    guard let markerRange = query.range(of: marker, options: .caseInsensitive),
+          let end = query[markerRange.upperBound...].firstIndex(of: "]") else {
+      return nil
+    }
+    let itemID = query[markerRange.upperBound..<end]
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return itemID.isEmpty ? nil : itemID
+  }
+
+  private static func retrievalQuery(for item: StudyPlanItem) -> String {
+    ([item.title, item.objective] + item.topics + item.sourcePaths)
+      .joined(separator: " ")
+  }
+
+  private func studyPlanEvidence(
+    studySpaceID: String,
+    query: String
+  ) async -> [KnowledgeSearchResult] {
+    let ranked = (try? await storage.search(
+      studySpaceID: studySpaceID,
+      query: query,
+      limit: 16
+    )) ?? []
+    let browsed = (try? await storage.chunks(
+      studySpaceID: studySpaceID,
+      limit: 240
+    )) ?? []
+
+    var seenChunkIDs = Set(ranked.map(\.chunk.id))
+    var seenPaths = Set(ranked.map(\.chunk.relativePath))
+    var evidence = ranked
+    for chunk in browsed where !seenPaths.contains(chunk.relativePath) {
+      guard seenChunkIDs.insert(chunk.id).inserted else { continue }
+      seenPaths.insert(chunk.relativePath)
+      evidence.append(KnowledgeSearchResult(chunk: chunk, score: 0))
+      if evidence.count == 40 {
+        break
+      }
+    }
+    return evidence
+  }
+
+  private func reloadStudyPlans() async throws {
+    studyPlans = try await storage.studyPlans()
   }
 }

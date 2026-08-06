@@ -35,7 +35,15 @@ public struct CodingBuddyChatSettingsView: View {
         { AnyView(MLXModelManagerView(manager: service.onDeviceModelManager)) }
       },
       extraSections: chatService.map { service in
-        { AnyView(InterviewSettingsSection(settings: service.interviewSettings)) }
+        {
+          AnyView(Group {
+            InterviewSettingsSection(settings: service.interviewSettings)
+            StudyPlanSettingsSection(
+              library: service.knowledgeLibrary,
+              chatService: service
+            )
+          })
+        }
       }
     )
     .tint(EaselDesignSystem.Palette.accent)

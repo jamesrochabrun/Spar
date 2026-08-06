@@ -58,6 +58,114 @@ public actor SQLiteKnowledgeStorage: KnowledgeStorageProtocol {
     }
   }
 
+  public func saveStudyPlan(_ studyPlan: StudyPlan) async throws {
+    try initializeIfNeeded()
+    try database.transaction {
+      try database.run(
+        """
+        INSERT INTO study_plans (
+          id, study_space_id, title, summary, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          title = excluded.title,
+          summary = excluded.summary,
+          updated_at = excluded.updated_at
+        """,
+        studyPlan.id,
+        studyPlan.studySpaceID,
+        studyPlan.title,
+        studyPlan.summary,
+        studyPlan.createdAt.timeIntervalSince1970,
+        studyPlan.updatedAt.timeIntervalSince1970
+      )
+      try database.run("DELETE FROM study_plan_items WHERE plan_id = ?", studyPlan.id)
+
+      for (index, item) in studyPlan.items.enumerated() {
+        try database.run(
+          """
+          INSERT INTO study_plan_items (
+            plan_id, item_id, order_index, section_title, title, objective,
+            topics_json, source_paths_json, prerequisite_ids_json,
+            is_completed, completed_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          """,
+          studyPlan.id,
+          item.id,
+          index,
+          item.section,
+          item.title,
+          item.objective,
+          try encodedStringArray(item.topics),
+          try encodedStringArray(item.sourcePaths),
+          try encodedStringArray(item.prerequisiteIDs),
+          item.isCompleted ? 1 : 0,
+          item.completedAt?.timeIntervalSince1970
+        )
+      }
+    }
+  }
+
+  public func studyPlans() async throws -> [StudyPlan] {
+    try initializeIfNeeded()
+    let sql = """
+      SELECT id, study_space_id, title, summary, created_at, updated_at
+      FROM study_plans
+      ORDER BY updated_at DESC
+      """
+    var plans: [StudyPlan] = []
+    for row in try database.prepare(sql) {
+      guard let plan = try studyPlan(from: row) else { continue }
+      plans.append(plan)
+    }
+    return plans
+  }
+
+  public func studyPlan(studySpaceID: String) async throws -> StudyPlan? {
+    try initializeIfNeeded()
+    let sql = """
+      SELECT id, study_space_id, title, summary, created_at, updated_at
+      FROM study_plans
+      WHERE study_space_id = ?
+      LIMIT 1
+      """
+    for row in try database.prepare(sql, [studySpaceID]) {
+      return try studyPlan(from: row)
+    }
+    return nil
+  }
+
+  public func setStudyPlanItemCompletion(
+    planID: String,
+    itemID: String,
+    isCompleted: Bool,
+    completedAt: Date?
+  ) async throws {
+    try initializeIfNeeded()
+    try database.transaction {
+      try database.run(
+        """
+        UPDATE study_plan_items
+        SET is_completed = ?, completed_at = ?
+        WHERE plan_id = ? AND item_id = ?
+        """,
+        isCompleted ? 1 : 0,
+        completedAt?.timeIntervalSince1970,
+        planID,
+        itemID
+      )
+      try database.run(
+        "UPDATE study_plans SET updated_at = ? WHERE id = ?",
+        Date.now.timeIntervalSince1970,
+        planID
+      )
+    }
+  }
+
+  public func deleteStudyPlan(id: String) async throws {
+    try initializeIfNeeded()
+    try database.run("DELETE FROM study_plans WHERE id = ?", id)
+  }
+
   public func saveSource(_ source: KnowledgeSource) async throws {
     try initializeIfNeeded()
     try database.run(
@@ -185,9 +293,32 @@ public actor SQLiteKnowledgeStorage: KnowledgeStorageProtocol {
     limit: Int
   ) async throws -> [KnowledgeSearchResult] {
     try initializeIfNeeded()
-    let ftsQuery = Self.ftsQuery(query)
-    guard !ftsQuery.isEmpty else { return [] }
+    let tokens = Self.ftsTokens(query)
+    guard !tokens.isEmpty else { return [] }
 
+    // Prefer passages matching every term; when that comes up empty (common
+    // for exploratory multi-word queries) fall back to any-term matches so
+    // the user still gets ranked results instead of a dead end.
+    let allTerms = try runSearch(
+      matching: tokens.joined(separator: " "),
+      studySpaceID: studySpaceID,
+      limit: limit
+    )
+    if !allTerms.isEmpty || tokens.count == 1 {
+      return allTerms
+    }
+    return try runSearch(
+      matching: tokens.joined(separator: " OR "),
+      studySpaceID: studySpaceID,
+      limit: limit
+    )
+  }
+
+  private func runSearch(
+    matching ftsQuery: String,
+    studySpaceID: String,
+    limit: Int
+  ) throws -> [KnowledgeSearchResult] {
     let sql = """
       SELECT c.id, c.study_space_id, c.source_id, c.relative_path,
              c.start_line, c.end_line, c.content, c.content_hash,
@@ -307,6 +438,32 @@ public actor SQLiteKnowledgeStorage: KnowledgeStorageProtocol {
       CREATE INDEX IF NOT EXISTS idx_knowledge_sources_space
         ON knowledge_sources(study_space_id);
 
+      CREATE TABLE IF NOT EXISTS study_plans (
+        id             TEXT PRIMARY KEY,
+        study_space_id TEXT NOT NULL UNIQUE REFERENCES study_spaces(id) ON DELETE CASCADE,
+        title          TEXT NOT NULL,
+        summary        TEXT NOT NULL,
+        created_at     REAL NOT NULL,
+        updated_at     REAL NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS study_plan_items (
+        plan_id              TEXT NOT NULL REFERENCES study_plans(id) ON DELETE CASCADE,
+        item_id              TEXT NOT NULL,
+        order_index          INTEGER NOT NULL,
+        section_title        TEXT NOT NULL,
+        title                TEXT NOT NULL,
+        objective            TEXT NOT NULL,
+        topics_json          TEXT NOT NULL,
+        source_paths_json    TEXT NOT NULL,
+        prerequisite_ids_json TEXT NOT NULL,
+        is_completed         INTEGER NOT NULL DEFAULT 0,
+        completed_at         REAL,
+        PRIMARY KEY (plan_id, item_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_study_plan_items_order
+        ON study_plan_items(plan_id, order_index);
+
       CREATE TABLE IF NOT EXISTS knowledge_chunks (
         id             TEXT PRIMARY KEY,
         study_space_id TEXT NOT NULL REFERENCES study_spaces(id) ON DELETE CASCADE,
@@ -383,6 +540,72 @@ public actor SQLiteKnowledgeStorage: KnowledgeStorageProtocol {
     )
   }
 
+  private func studyPlan(from row: Statement.Element) throws -> StudyPlan? {
+    guard let id = row[0] as? String,
+          let studySpaceID = row[1] as? String,
+          let title = row[2] as? String,
+          let summary = row[3] as? String,
+          let createdAt = row[4] as? Double,
+          let updatedAt = row[5] as? Double else {
+      return nil
+    }
+
+    let itemSQL = """
+      SELECT item_id, section_title, title, objective, topics_json,
+             source_paths_json, prerequisite_ids_json, is_completed, completed_at
+      FROM study_plan_items
+      WHERE plan_id = ?
+      ORDER BY order_index
+      """
+    var items: [StudyPlanItem] = []
+    for itemRow in try database.prepare(itemSQL, [id]) {
+      guard let item = studyPlanItem(from: itemRow) else { continue }
+      items.append(item)
+    }
+    return StudyPlan(
+      id: id,
+      studySpaceID: studySpaceID,
+      title: title,
+      summary: summary,
+      items: items,
+      createdAt: Date(timeIntervalSince1970: createdAt),
+      updatedAt: Date(timeIntervalSince1970: updatedAt)
+    )
+  }
+
+  private func studyPlanItem(from row: Statement.Element) -> StudyPlanItem? {
+    guard let id = row[0] as? String,
+          let section = row[1] as? String,
+          let title = row[2] as? String,
+          let objective = row[3] as? String,
+          let topicsJSON = row[4] as? String,
+          let sourcePathsJSON = row[5] as? String,
+          let prerequisiteIDsJSON = row[6] as? String else {
+      return nil
+    }
+    return StudyPlanItem(
+      id: id,
+      section: section,
+      title: title,
+      objective: objective,
+      topics: decodedStringArray(topicsJSON),
+      sourcePaths: decodedStringArray(sourcePathsJSON),
+      prerequisiteIDs: decodedStringArray(prerequisiteIDsJSON),
+      isCompleted: (row[7] as? Int64 ?? 0) != 0,
+      completedAt: (row[8] as? Double).map(Date.init(timeIntervalSince1970:))
+    )
+  }
+
+  private func encodedStringArray(_ strings: [String]) throws -> String {
+    let data = try JSONEncoder().encode(strings)
+    return String(decoding: data, as: UTF8.self)
+  }
+
+  private func decodedStringArray(_ string: String) -> [String] {
+    guard let data = string.data(using: .utf8) else { return [] }
+    return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+  }
+
   private func chunk(from row: Statement.Element) -> KnowledgeChunk? {
     guard let id = row[0] as? String,
           let studySpaceID = row[1] as? String,
@@ -406,13 +629,15 @@ public actor SQLiteKnowledgeStorage: KnowledgeStorageProtocol {
     )
   }
 
-  private static func ftsQuery(_ query: String) -> String {
-    let tokens = query
+  /// Sanitized prefix-match terms for FTS5. Symbols are stripped (they are
+  /// MATCH syntax), and every term keeps a trailing `*` so search-as-you-type
+  /// matches partial identifiers.
+  private static func ftsTokens(_ query: String) -> [String] {
+    query
       .lowercased()
       .components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_")).inverted)
-      .filter { $0.count > 1 }
+      .filter { !$0.isEmpty }
       .prefix(16)
-    return tokens.map { "\"\($0.replacingOccurrences(of: "\"", with: "\"\""))\"*" }
-      .joined(separator: " OR ")
+      .map { "\"\($0)\"*" }
   }
 }

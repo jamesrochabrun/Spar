@@ -53,6 +53,72 @@ struct SQLiteKnowledgeStorageTests {
   }
 
   @Test
+  func searchPrefersAllTermMatchesAndFallsBackToAnyTerm() async throws {
+    let (storage, root) = makeStorage()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let space = StudySpace(name: "Repo")
+    let source = KnowledgeSource(
+      studySpaceID: space.id,
+      displayName: "Repo",
+      rootPath: "/tmp/Repo",
+      indexStatus: .ready,
+      indexedFileCount: 2,
+      chunkCount: 2
+    )
+    let timerChunk = KnowledgeChunk(
+      id: "timer",
+      studySpaceID: space.id,
+      sourceID: source.id,
+      relativePath: "Timer.swift",
+      startLine: 1,
+      endLine: 5,
+      content: "SessionTimer counts down the interview deadline.",
+      contentHash: "a"
+    )
+    let networkChunk = KnowledgeChunk(
+      id: "network",
+      studySpaceID: space.id,
+      sourceID: source.id,
+      relativePath: "Network.swift",
+      startLine: 1,
+      endLine: 5,
+      content: "NetworkClient fetches interview questions remotely.",
+      contentHash: "b"
+    )
+
+    try await storage.saveStudySpace(space)
+    try await storage.saveSource(source)
+    try await storage.replaceChunks(for: source.id, with: [timerChunk, networkChunk])
+
+    // Both terms appear only in the timer chunk: AND semantics keep the
+    // network chunk (which matches just "interview") out.
+    let allTerms = try await storage.search(
+      studySpaceID: space.id,
+      query: "timer interview",
+      limit: 5
+    )
+    #expect(allTerms.map(\.chunk.id) == [timerChunk.id])
+
+    // No chunk has every term, so the search falls back to any-term matches
+    // instead of returning nothing.
+    let fallback = try await storage.search(
+      studySpaceID: space.id,
+      query: "quasar interview",
+      limit: 5
+    )
+    #expect(Set(fallback.map(\.chunk.id)) == [timerChunk.id, networkChunk.id])
+
+    // Symbol-only queries are stripped to nothing and return empty safely.
+    let symbols = try await storage.search(studySpaceID: space.id, query: "()->{}", limit: 5)
+    #expect(symbols.isEmpty)
+
+    // Single characters still prefix-match instead of dead-ending.
+    let singleCharacter = try await storage.search(studySpaceID: space.id, query: "n", limit: 5)
+    #expect(singleCharacter.contains { $0.chunk.id == networkChunk.id })
+  }
+
+  @Test
   func sessionBindingRoundTripsAndCascadesWithSpace() async throws {
     let (storage, root) = makeStorage()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -75,5 +141,52 @@ struct SQLiteKnowledgeStorageTests {
 
     try await storage.deleteStudySpace(id: space.id)
     #expect(try await storage.sessionBinding(chatSessionID: "chat-1") == nil)
+  }
+
+  @Test
+  func studyPlanCompletionRoundTripsAndCascadesWithSpace() async throws {
+    let (storage, root) = makeStorage()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let space = StudySpace(name: "Repository")
+    let plan = StudyPlan(
+      id: "plan-\(space.id)",
+      studySpaceID: space.id,
+      title: "Repository Plan",
+      summary: "Learn in order.",
+      items: [
+        StudyPlanItem(
+          id: "architecture",
+          section: "Foundations",
+          title: "Architecture",
+          objective: "Map the modules."
+        ),
+        StudyPlanItem(
+          id: "testing",
+          section: "Quality",
+          title: "Testing",
+          objective: "Understand the test strategy.",
+          prerequisiteIDs: ["architecture"]
+        ),
+      ]
+    )
+
+    try await storage.saveStudySpace(space)
+    try await storage.saveStudyPlan(plan)
+    #expect(try await storage.studyPlan(studySpaceID: space.id) == plan)
+
+    try await storage.setStudyPlanItemCompletion(
+      planID: plan.id,
+      itemID: "architecture",
+      isCompleted: true,
+      completedAt: .now
+    )
+    let completed = try #require(await storage.studyPlan(studySpaceID: space.id))
+    #expect(completed.completedItemCount == 1)
+    #expect(completed.items.first?.isCompleted == true)
+    #expect(completed.nextIncompleteItem?.id == "testing")
+
+    try await storage.deleteStudySpace(id: space.id)
+    #expect(try await storage.studyPlan(studySpaceID: space.id) == nil)
   }
 }

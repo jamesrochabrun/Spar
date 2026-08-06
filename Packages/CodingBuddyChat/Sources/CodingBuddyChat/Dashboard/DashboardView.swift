@@ -35,12 +35,16 @@ public struct DashboardView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 28) {
         if hasAnyData {
-          skillsSection
+          if hasSkillData {
+            skillsSection
+          }
           trendSection
           if !skillStats.openNotes.isEmpty {
             notesSection
           }
-          recentAttemptsSection
+          if !displayedAttempts.isEmpty {
+            recentAttemptsSection
+          }
         } else {
           emptyState
         }
@@ -56,7 +60,23 @@ public struct DashboardView: View {
   }
 
   private var hasAnyData: Bool {
-    !skillStats.recentAttempts.isEmpty || !skillStats.openNotes.isEmpty
+    hasSkillData || !displayedAttempts.isEmpty || !skillStats.openNotes.isEmpty
+  }
+
+  private var hasSkillData: Bool {
+    Self.categories.contains { category in
+      skillStats.stats(forCategory: category.id).contains { $0.averageScore != nil }
+    }
+  }
+
+  /// Attempts worth surfacing: they carry a question, a score, or are being
+  /// graded. Untitled in-progress practice chats are sidebar noise, not stats.
+  private var displayedAttempts: [SkillStatsService.AttemptSummary] {
+    skillStats.recentAttempts.filter { summary in
+      summary.questionTitle != nil
+        || summary.overallScore != nil
+        || summary.attempt.status == .awaitingEvaluation
+    }
   }
 
   private var emptyState: some View {
@@ -207,9 +227,10 @@ public struct DashboardView: View {
       sectionTitle("Recent attempts")
 
       VStack(spacing: 0) {
-        ForEach(skillStats.recentAttempts.prefix(15)) { summary in
+        let rows = displayedAttempts.prefix(15)
+        ForEach(rows) { summary in
           attemptRow(summary)
-          if summary.id != skillStats.recentAttempts.prefix(15).last?.id {
+          if summary.id != rows.last?.id {
             Divider()
           }
         }

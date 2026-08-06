@@ -85,7 +85,11 @@ public final class SidebarViewModel {
 
   // MARK: - Pending session (optimistic row)
 
-  public func preparePendingNewSession(mode: SessionMode, workingDirectory: String?) {
+  public func preparePendingNewSession(
+    mode: SessionMode,
+    provider: ChatProvider,
+    workingDirectory: String?
+  ) {
     let normalizedWorkingDirectory = Self.normalizedWorkingDirectory(workingDirectory)
     let now = Date()
     let session = StoredSession(
@@ -93,7 +97,8 @@ public final class SidebarViewModel {
       createdAt: now,
       firstUserMessage: "",
       lastAccessedAt: now,
-      workingDirectory: normalizedWorkingDirectory
+      workingDirectory: normalizedWorkingDirectory,
+      provider: provider
     )
 
     pendingNewSessionMode = mode
@@ -116,7 +121,8 @@ public final class SidebarViewModel {
       messages: pendingNewSession.messages,
       workingDirectory: pendingNewSession.workingDirectory,
       branchName: pendingNewSession.branchName,
-      isWorktree: pendingNewSession.isWorktree
+      isWorktree: pendingNewSession.isWorktree,
+      provider: pendingNewSession.provider
     )
 
     replacePendingNewSession(with: completedPendingSession)
@@ -146,7 +152,11 @@ public final class SidebarViewModel {
 
   func startSession(_ request: ChatService.NewSessionRequest) {
     isNewSessionSheetPresented = false
-    preparePendingNewSession(mode: request.mode, workingDirectory: nil)
+    preparePendingNewSession(
+      mode: request.mode,
+      provider: request.provider ?? .claude,
+      workingDirectory: nil
+    )
     onStartSession?(request)
   }
 
@@ -229,7 +239,7 @@ public final class SidebarViewModel {
 
     let placeholder = InterviewAttempt(
       chatSessionId: pendingNewSession.id,
-      provider: "claude",
+      provider: pendingNewSession.provider.rawValue,
       mode: pendingNewSessionMode,
       startedAt: pendingNewSession.createdAt
     )

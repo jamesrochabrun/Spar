@@ -20,14 +20,21 @@ struct SessionSurfacePresentationTests {
   }
 
   @Test
-  func sourceBackedSessionsAddSourcesWithoutChangingExistingDefaults() {
+  func sourceBackedSessionsKeepWorkspaceFirstAndDefault() {
     let regular = StudioSurface.available(for: .mockInterview)
     let grounded = StudioSurface.available(for: .mockInterview, includesSources: true)
 
     #expect(!regular.contains(.sources))
-    #expect(grounded.first == .sources)
-    #expect(grounded.contains(.workspace))
-    #expect(StudioSurface.defaultSurface(for: .practice, prefersSources: true) == .sources)
+    // The working surface stays first; Sources slots in right after it.
+    #expect(grounded.first == .workspace)
+    #expect(grounded[1] == .sources)
+    // Grounded sessions still open on the workspace, never on Sources.
+    #expect(StudioSurface.defaultSurface(for: .practice) == .workspace)
+    #expect(StudioSurface.defaultSurface(for: .mockInterview) == .workspace)
+
+    let groundedSystemDesign = StudioSurface.available(for: .systemDesign, includesSources: true)
+    #expect(groundedSystemDesign.first == .whiteboard)
+    #expect(groundedSystemDesign[1] == .sources)
   }
 
   @Test

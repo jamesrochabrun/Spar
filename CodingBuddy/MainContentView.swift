@@ -108,6 +108,7 @@ struct MainContentView: View {
         interviewStorage: chatService.interviewStorage
       )
       vm.onSessionSelected = { session in
+        contentMode.showSession()
         Task {
           await chatService.initialize()
           await chatService.switchToSession(session)
@@ -115,11 +116,9 @@ struct MainContentView: View {
         }
       }
       vm.onStartSession = { request in
+        contentMode.showSession()
         isReportGenerationRequested = false
-        selectedSurface = StudioSurface.defaultSurface(
-          for: request.mode,
-          prefersSources: request.prefersSourcesAsDefault
-        )
+        selectedSurface = StudioSurface.defaultSurface(for: request.mode)
         Task {
           await chatService.initialize()
           await chatService.startNewSession(request)
@@ -131,7 +130,7 @@ struct MainContentView: View {
         selectedSurface = .report
       }
       vm.onDashboardToggle = {
-        contentMode = contentMode == .dashboard ? .session : .dashboard
+        contentMode.toggleDashboard()
       }
       vm.onDeleteSession = { session in
         Task {
@@ -178,7 +177,7 @@ struct MainContentView: View {
         Spacer()
 
         Button("Back to Session") {
-          contentMode = .session
+          contentMode.showSession()
         }
         .controlSize(.small)
       }
@@ -194,18 +193,22 @@ struct MainContentView: View {
       DashboardView(
         skillStats: chatService.skillStats,
         onRetryQuestion: { question in
-          contentMode = .session
+          contentMode.showSession()
           selectedSurface = StudioSurface.defaultSurface(for: question.mode)
           let request = ChatService.NewSessionRequest(
             mode: question.mode,
             question: question,
             durationSeconds: question.mode.isTimedByDefault ? 35 * 60 : nil
           )
-          sidebarViewModel?.preparePendingNewSession(mode: question.mode, workingDirectory: nil)
+          sidebarViewModel?.preparePendingNewSession(
+            mode: question.mode,
+            provider: chatService.globalPreferences?.chatProvider ?? .claude,
+            workingDirectory: nil
+          )
           sidebarViewModel?.onStartSession?(request)
         },
         onOpenSession: { chatSessionId in
-          contentMode = .session
+          contentMode.showSession()
           Task {
             if let session = try? await chatService.sessionStorage.getSession(id: chatSessionId) {
               sidebarViewModel?.selectedSessionId = chatSessionId
@@ -233,7 +236,11 @@ struct MainContentView: View {
       knowledgeLibrary: chatService.knowledgeLibrary,
       onStart: { request in
         sidebarVM.isNewSessionSheetPresented = false
-        sidebarVM.preparePendingNewSession(mode: request.mode, workingDirectory: nil)
+        sidebarVM.preparePendingNewSession(
+          mode: request.mode,
+          provider: request.provider ?? chatService.globalPreferences?.chatProvider ?? .claude,
+          workingDirectory: nil
+        )
         sidebarVM.onStartSession?(request)
       },
       onCancel: {
@@ -365,19 +372,13 @@ struct MainContentView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onChange(of: chatService.currentMode) { _, newMode in
       if !availableSurfaces.contains(selectedSurface) {
-        selectedSurface = StudioSurface.defaultSurface(
-          for: newMode,
-          prefersSources: chatService.currentKnowledgeActivityIsLearning
-        )
+        selectedSurface = StudioSurface.defaultSurface(for: newMode)
       }
     }
     .onChange(of: chatService.currentSessionId) { _, _ in
       isReportGenerationRequested = false
       isWhiteboardCreationRequested = false
-      selectedSurface = StudioSurface.defaultSurface(
-        for: chatService.currentMode,
-        prefersSources: chatService.currentKnowledgeActivityIsLearning
-      )
+      selectedSurface = StudioSurface.defaultSurface(for: chatService.currentMode)
       // Restored sessions with a report jump straight to it.
       if chatService.interviewSession.latestEvaluation != nil {
         selectedSurface = .report
@@ -385,14 +386,13 @@ struct MainContentView: View {
     }
     .onChange(of: chatService.currentKnowledgeStudySpaceID) { _, _ in
       if !availableSurfaces.contains(selectedSurface) {
-        selectedSurface = StudioSurface.defaultSurface(
-          for: chatService.currentMode,
-          prefersSources: chatService.currentKnowledgeActivityIsLearning
-        )
+        selectedSurface = StudioSurface.defaultSurface(for: chatService.currentMode)
       }
     }
-    .onChange(of: chatService.knowledgeLibrary.selectedChunkID) { _, chunkID in
-      if chunkID != nil, shouldExposeKnowledgeSources {
+    .onChange(of: chatService.knowledgeLibrary.citationActivationCount) { _, _ in
+      // Only explicit transcript citation clicks reveal the Sources surface;
+      // background browsing in the (hidden) panel must not steal the surface.
+      if shouldExposeKnowledgeSources {
         selectedSurface = .sources
       }
     }
@@ -526,10 +526,7 @@ struct MainContentView: View {
   }
 
   private var currentDefaultSurface: StudioSurface {
-    StudioSurface.defaultSurface(
-      for: chatService.currentMode,
-      prefersSources: chatService.currentKnowledgeActivityIsLearning
-    )
+    StudioSurface.defaultSurface(for: chatService.currentMode)
   }
 
   private var studioWidthButtonSystemImage: String {
@@ -564,7 +561,15 @@ struct MainContentView: View {
   }
 }
 
-private enum MainContentMode: Equatable {
+enum MainContentMode: Equatable {
   case dashboard
   case session
+
+  mutating func showSession() {
+    self = .session
+  }
+
+  mutating func toggleDashboard() {
+    self = self == .dashboard ? .session : .dashboard
+  }
 }

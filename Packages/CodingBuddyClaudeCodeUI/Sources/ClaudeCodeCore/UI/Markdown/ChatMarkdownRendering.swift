@@ -26,6 +26,7 @@ enum BuddyFenceCollapser {
   private static let chips: [(language: String, chip: String, streamingChip: String)] = [
     ("buddy-question", "`📥 Question saved to bank`", "`📥 Saving question…`"),
     ("buddy-eval", "`📊 Evaluation recorded`", "`📊 Grading…`"),
+    ("buddy-study-plan", "`📚 Study plan saved`", "`📚 Building study plan…`"),
   ]
 
   static func collapse(_ markdown: String) -> String {

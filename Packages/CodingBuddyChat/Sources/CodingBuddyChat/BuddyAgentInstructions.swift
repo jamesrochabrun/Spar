@@ -48,6 +48,30 @@ public enum BuddyAgentInstructions {
     - `improvement_notes` are specific, actionable study items with topic slugs.
     """
 
+  static let studyPlanContract = """
+    Repository learning plans: when the candidate message contains \
+    [CREATE STUDY PLAN], inspect the supplied buddy-evidence and emit exactly \
+    one fenced code block with language tag `buddy-study-plan` containing a \
+    single JSON object on this schema (no prose inside the fence):
+
+    ```buddy-study-plan
+    {"schema":"buddy-study-plan/v1","title":"...","summary":"...",
+     "items":[{"id":"stable-kebab-id","section":"Foundations","title":"...",
+     "objective":"What the learner will understand or be able to explain",
+     "topics":["architecture"],"source_paths":["Sources/App.swift"],
+     "prerequisite_ids":[]}]}
+    ```
+
+    - Build a progressive checklist of 6-15 substantial items grounded in the \
+    repository evidence: orientation first, then architecture and data flow, \
+    core features, testing, and advanced trade-offs where applicable.
+    - Keep item `id` values stable, unique, and kebab-case so saved completion \
+    survives a regenerated plan. Use real repository-relative source paths.
+    - Do not mark completion in this block; the app owns completion state.
+    - After the fence, briefly introduce the plan and begin only the requested \
+    item, or the first incomplete item when none was requested.
+    """
+
   // MARK: - Shared environment base
 
   static let reviewContract = """
@@ -86,6 +110,8 @@ public enum BuddyAgentInstructions {
     \(questionContract)
 
     \(evalContract)
+
+    \(studyPlanContract)
 
     \(reviewContract)
     """
@@ -228,6 +254,13 @@ public enum BuddyAgentInstructions {
         source claims with the citation URLs supplied in buddy-evidence.
         - If the evidence does not support an answer, say so clearly instead of \
         inventing repository details.
+        - A buddy-study-plan-state block, when present, is the app-owned live \
+        checklist. Respect its completion flags and nextItemID when recommending \
+        what to learn next.
+        - [STUDY PLAN NEXT], [STUDY PLAN RANDOM], and [STUDY PLAN ITEM: id] \
+        request a lesson from that checklist. For RANDOM, choose an incomplete \
+        item when possible. Ground the lesson in source evidence and focus on \
+        one item at a time.
         """
     case .interview:
       let accessGuidance = configuration.sourceAccess == .closedBook
@@ -278,6 +311,14 @@ public enum BuddyAgentInstructions {
       - Evaluations assess demonstrated skills only. Never give a hire/no-hire recommendation.
       - Rubric dimensions: \(rubric).
       - Output valid JSON inside fences. No trailing commas.
+      - On [CREATE STUDY PLAN], output a ```buddy-study-plan fence: \
+      {"schema":"buddy-study-plan/v1","title":"...","summary":"...",\
+      "items":[{"id":"stable-kebab-id","section":"Foundations","title":"...",\
+      "objective":"...","topics":["..."],"source_paths":["relative/path"],\
+      "prerequisite_ids":[]}]} Make 6-15 progressive repository-grounded items.
+      - buddy-study-plan-state is app-owned progress. Respect completed flags. \
+      [STUDY PLAN NEXT], [STUDY PLAN RANDOM], or [STUDY PLAN ITEM: id] asks \
+      for one focused lesson from it.
       - On [REVIEW MY SOLUTION]: read the workspace solution file and coach. \
       Correct -> say "Correct" + one complexity line. Wrong -> name the exact \
       failing case or misconception in simple words and how to think about \
@@ -352,6 +393,48 @@ public enum BuddyAgentInstructions {
     [CREATE WHITEBOARD] Create the shared editable whiteboard now. Keep it \
     intentionally sparse so I can drive the design.
     """
+
+  public static func studyPlanGenerationDirective(
+    studySpaceName: String,
+    requestedItemID: String? = nil
+  ) -> String {
+    let focus = requestedItemID.map {
+      "After saving the plan, begin the item whose stable id is `\($0)` if it exists."
+    } ?? "After saving the plan, briefly introduce it and begin its first item."
+    return """
+      [CREATE STUDY PLAN]
+
+      Analyze the indexed evidence for “\(studySpaceName)” as a codebase a \
+      developer wants to understand deeply. Create a progressive, \
+      repository-specific learning checklist using the buddy-study-plan/v1 \
+      contract from your instructions. Cover how to navigate the repository, \
+      its architecture and data flow, important features, tests, and the \
+      highest-value design trade-offs supported by the evidence.
+
+      \(focus)
+      """
+  }
+
+  public static func studyPlanRepairDirective() -> String {
+    """
+    [STUDY PLAN PARSE ERROR]
+
+    Your previous reply did not contain a parseable ```buddy-study-plan fence. \
+    Re-emit ONLY that fenced block now with valid JSON matching \
+    buddy-study-plan/v1. Include 6-15 items with stable id, section, title, \
+    objective, topics, source_paths, and prerequisite_ids fields.
+    """
+  }
+
+  public static func studyTopicRequestMessage(itemID: String) -> String {
+    "[STUDY PLAN ITEM: \(itemID)] Teach this plan item now, grounded in the repository."
+  }
+
+  public static let nextStudyTopicMessage =
+    "[STUDY PLAN NEXT] Continue with the next incomplete item in my saved plan."
+
+  public static let randomStudyTopicMessage =
+    "[STUDY PLAN RANDOM] Choose one incomplete item from my saved plan and teach it now."
 
   /// Canonical review request sent by the editor's Review button. The
   /// review contract in the system prompt governs the response: locate the

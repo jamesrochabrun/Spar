@@ -116,4 +116,52 @@ struct InterviewSessionServiceTests {
     let stored = try await storage.attempt(id: attempt.id)
     #expect(stored?.status == .abandoned)
   }
+
+  @Test
+  func beginningNewAttemptAbandonsUnfinishedAttempt() async throws {
+    let (service, storage, root) = makeService()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let first = try await service.beginAttempt(mode: .practice, provider: "codex")
+    let second = try await service.beginAttempt(mode: .practice, provider: "codex")
+
+    let storedFirst = try #require(try await storage.attempt(id: first.id))
+    #expect(storedFirst.status == .abandoned)
+    #expect(storedFirst.endedAt != nil)
+    #expect(service.activeAttempt?.id == second.id)
+  }
+
+  @Test
+  func restoringAnotherSessionAbandonsUnfinishedAttempt() async throws {
+    let (service, storage, root) = makeService()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let restoredAttempt = try await service.beginAttempt(mode: .practice, provider: "codex")
+    await service.linkChatSession("chat-restored")
+    service.clearActiveAttempt()
+
+    let unfinishedAttempt = try await service.beginAttempt(mode: .practice, provider: "codex")
+    await service.linkChatSession("chat-unfinished")
+
+    let restored = await service.restoreAttempt(forChatSessionId: "chat-restored")
+
+    #expect(restored?.id == restoredAttempt.id)
+    #expect(service.activeAttempt?.id == restoredAttempt.id)
+    let storedUnfinished = try #require(try await storage.attempt(id: unfinishedAttempt.id))
+    #expect(storedUnfinished.status == .abandoned)
+  }
+
+  @Test
+  func leavingAttemptPreservesAwaitingEvaluationStatus() async throws {
+    let (service, storage, root) = makeService()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let attempt = try await service.beginAttempt(mode: .practice, provider: "api")
+    await service.requestEvaluation()
+    await service.leaveActiveAttempt()
+
+    #expect(service.activeAttempt == nil)
+    let stored = try #require(try await storage.attempt(id: attempt.id))
+    #expect(stored.status == .awaitingEvaluation)
+  }
 }

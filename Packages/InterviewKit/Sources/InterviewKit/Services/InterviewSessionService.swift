@@ -40,6 +40,8 @@ public final class InterviewSessionService {
     hintBudget: Int = 3,
     provider: String
   ) async throws -> InterviewAttempt {
+    await leaveActiveAttempt()
+
     let workspaceSlug = question?.title ?? mode.displayName
     let workspacePath = try? workspaceManager.createWorkspace(slug: workspaceSlug)
 
@@ -110,10 +112,46 @@ public final class InterviewSessionService {
   }
 
   public func abandon() async {
-    guard var attempt = activeAttempt else { return }
-    attempt.status = .abandoned
-    attempt.endedAt = Date()
-    try? await storage.updateAttempt(attempt)
+    await leaveActiveAttempt()
+  }
+
+  /// Leaves the visible attempt, abandoning unfinished work while preserving
+  /// attempts that are already being graded or have completed.
+  public func leaveActiveAttempt() async {
+    if var attempt = activeAttempt, attempt.status == .inProgress {
+      attempt.status = .abandoned
+      attempt.endedAt = Date()
+      try? await storage.updateAttempt(attempt)
+    }
+
+    clearActiveAttempt()
+  }
+
+  private func activate(_ attempt: InterviewAttempt?) async {
+    guard let attempt else {
+      clearActiveAttempt()
+      return
+    }
+
+    activeAttempt = attempt
+    if let questionId = attempt.questionId {
+      activeQuestion = try? await storage.question(id: questionId)
+    } else {
+      activeQuestion = nil
+    }
+    latestEvaluation = try? await storage.evaluation(forAttemptId: attempt.id)
+    latestNotes = (try? await storage.notes(forAttemptId: attempt.id)) ?? []
+  }
+
+  private func replaceActiveAttempt(with attempt: InterviewAttempt?) async {
+    if activeAttempt?.id != attempt?.id {
+      await leaveActiveAttempt()
+    }
+
+    await activate(attempt)
+  }
+
+  private func clearActiveAttemptState() {
     activeAttempt = nil
     activeQuestion = nil
     latestEvaluation = nil
@@ -142,30 +180,13 @@ public final class InterviewSessionService {
   /// Sidebar restore: selecting a chat session re-activates its attempt.
   @discardableResult
   public func restoreAttempt(forChatSessionId chatSessionId: String) async -> InterviewAttempt? {
-    guard let attempt = try? await storage.attempt(forChatSessionId: chatSessionId) else {
-      activeAttempt = nil
-      activeQuestion = nil
-      latestEvaluation = nil
-      latestNotes = []
-      return nil
-    }
-
-    activeAttempt = attempt
-    if let questionId = attempt.questionId {
-      activeQuestion = try? await storage.question(id: questionId)
-    } else {
-      activeQuestion = nil
-    }
-    latestEvaluation = try? await storage.evaluation(forAttemptId: attempt.id)
-    latestNotes = (try? await storage.notes(forAttemptId: attempt.id)) ?? []
+    let attempt = try? await storage.attempt(forChatSessionId: chatSessionId)
+    await replaceActiveAttempt(with: attempt)
     return attempt
   }
 
   public func clearActiveAttempt() {
-    activeAttempt = nil
-    activeQuestion = nil
-    latestEvaluation = nil
-    latestNotes = []
+    clearActiveAttemptState()
   }
 
   // MARK: - Derived

@@ -52,16 +52,15 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
     case .mockInterview, .drill, .practice, nil:
       modeSurfaces = [.workspace, .whiteboard, .report]
     }
-    return includesSources ? [.sources] + modeSurfaces : modeSurfaces
+    guard includesSources else { return modeSurfaces }
+    // Sources is a reference surface, never the primary one: it slots in
+    // right after the mode's main working surface.
+    return Array(modeSurfaces.prefix(1)) + [.sources] + modeSurfaces.dropFirst()
   }
 
-  public static func defaultSurface(
-    for mode: SessionMode?,
-    prefersSources: Bool = false
-  ) -> StudioSurface {
-    if prefersSources {
-      return .sources
-    }
+  /// Sessions always open on the mode's working surface (workspace for coding
+  /// modes) — grounded sessions reach Sources via the tab or a citation click.
+  public static func defaultSurface(for mode: SessionMode?) -> StudioSurface {
     switch mode {
     case .systemDesign: return .whiteboard
     case .behavioral: return .hints

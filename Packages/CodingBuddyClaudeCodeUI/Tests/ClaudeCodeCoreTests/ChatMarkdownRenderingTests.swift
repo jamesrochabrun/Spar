@@ -101,4 +101,18 @@ final class ChatMarkdownRenderingTests: XCTestCase {
     XCTAssertTrue(mapper.isMermaid("mermaid diagram"))
     XCTAssertFalse(mapper.isMermaid("markdown"))
   }
+
+  func testStudyPlanFenceCollapsesToSavedChip() {
+    let renderer = DefaultChatMarkdownRenderer()
+    let markdown = """
+      ```buddy-study-plan
+      {"schema":"buddy-study-plan/v1","title":"Plan","items":[]}
+      ```
+      """
+
+    XCTAssertEqual(
+      renderer.displayMarkdown(for: markdown, isComplete: true),
+      "`📚 Study plan saved`"
+    )
+  }
 }

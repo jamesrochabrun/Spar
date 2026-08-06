@@ -106,10 +106,12 @@ struct SidebarViewModelTests {
     )
     await viewModel.loadSessions()
 
-    viewModel.preparePendingNewSession(mode: .drill, workingDirectory: nil)
+    viewModel.preparePendingNewSession(mode: .drill, provider: .claude, workingDirectory: nil)
     let drillGroup = try #require(viewModel.modeGroups.first { $0.mode == .drill })
     #expect(drillGroup.rows.count == 1)
     #expect(viewModel.selectedSessionId == drillGroup.rows[0].id)
+    // The optimistic row must show the provider the user picked, not a default.
+    #expect(drillGroup.rows[0].session.provider == .claude)
 
     // Completing swaps the optimistic id for the real session id.
     viewModel.completePendingNewSession(sessionId: "real-session-id")

@@ -184,6 +184,22 @@ struct InterviewIntegrationTests {
   }
 
   @Test
+  func clearingActiveWorkspaceAbandonsUnfinishedAttempt() async throws {
+    let (service, storage, root) = makeService()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    await service.startNewSession(ChatService.NewSessionRequest(mode: .practice))
+    let attempt = try #require(service.interviewSession.activeAttempt)
+
+    await service.clearActiveWorkspace()
+
+    #expect(service.interviewSession.activeAttempt == nil)
+    let stored = try #require(try await storage.attempt(id: attempt.id))
+    #expect(stored.status == .abandoned)
+    #expect(stored.endedAt != nil)
+  }
+
+  @Test
   func hintRequestIncrementsCounter() async throws {
     // No chat context on purpose: requestHint's send becomes a no-op so the
     // test never spawns a provider CLI; the deterministic counter still runs.

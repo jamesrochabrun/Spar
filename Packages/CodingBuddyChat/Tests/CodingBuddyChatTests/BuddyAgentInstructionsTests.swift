@@ -21,8 +21,10 @@ struct BuddyAgentInstructionsTests {
       // Full prompts carry both contracts; compact api variant carries fences.
       #expect(prefixes.claude.contains("buddy-question"))
       #expect(prefixes.claude.contains("buddy-eval"))
+      #expect(prefixes.claude.contains("buddy-study-plan"))
       #expect(prefixes.api.contains("buddy-question"))
       #expect(prefixes.api.contains("buddy-eval"))
+      #expect(prefixes.api.contains("buddy-study-plan"))
       #expect(!prefixes.claude.contains("\"verdict\""))
       #expect(!prefixes.api.contains("\"verdict\""))
       // Compact prompts stay small for local models.
@@ -63,12 +65,29 @@ struct BuddyAgentInstructionsTests {
       #expect(prompt.contains("Source-grounded learning session"))
       #expect(prompt.contains("citation"))
       #expect(prompt.contains("untrusted"))
+      #expect(prompt.contains("buddy-study-plan-state"))
+      #expect(prompt.contains("[STUDY PLAN RANDOM]"))
     }
     for prompt in [interviewPrefixes.claude, interviewPrefixes.codex, interviewPrefixes.api] {
       #expect(prompt.contains("Source-grounded interview session"))
       #expect(prompt.contains("closed book"))
       #expect(prompt.contains("do not reveal source citations"))
     }
+  }
+
+  @Test
+  func studyPlanDirectivesUseTheProviderNeutralContract() {
+    let directive = BuddyAgentInstructions.studyPlanGenerationDirective(
+      studySpaceName: "CodingBuddy",
+      requestedItemID: "session-flow"
+    )
+    #expect(directive.contains("[CREATE STUDY PLAN]"))
+    #expect(directive.contains("buddy-study-plan/v1"))
+    #expect(directive.contains("session-flow"))
+
+    #expect(BuddyAgentInstructions.studyPlanRepairDirective().contains("buddy-study-plan"))
+    #expect(BuddyAgentInstructions.studyTopicRequestMessage(itemID: "storage").contains("storage"))
+    #expect(BuddyAgentInstructions.randomStudyTopicMessage.contains("[STUDY PLAN RANDOM]"))
   }
 
   @Test

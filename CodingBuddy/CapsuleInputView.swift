@@ -9,8 +9,10 @@ import SwiftUI
 struct CapsuleInputView: View {
   @Bindable var appState: AppState
   var onDismiss: () -> Void = {}
+  @State private var isSendButtonPressed = false
   @FocusState private var isFocused: Bool
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
     HStack(spacing: 12) {
@@ -23,12 +25,13 @@ struct CapsuleInputView: View {
           appState.submitPrompt()
         }
 
-      Button(action: { appState.submitPrompt() }) {
+      Button(action: handleSendButtonTap) {
         Image(systemName: "arrow.up")
           .font(EaselDesignSystem.Typography.interface(size: 13, weight: .bold))
           .foregroundStyle(sendIconColor)
           .frame(width: 32, height: 32)
           .background(sendButtonBackground, in: Circle())
+          .scaleEffect(isSendButtonPressed ? 0.86 : 1)
       }
       .buttonStyle(.plain)
       .disabled(!canSubmit)
@@ -70,5 +73,22 @@ struct CapsuleInputView: View {
     canSubmit
       ? EaselDesignSystem.Palette.primaryActionForeground(for: colorScheme)
       : EaselDesignSystem.Palette.tertiaryText(for: colorScheme)
+  }
+
+  private func handleSendButtonTap() {
+    appState.submitPrompt()
+
+    guard !reduceMotion else { return }
+
+    withAnimation(.spring(response: 0.16, dampingFraction: 0.62)) {
+      isSendButtonPressed = true
+    }
+
+    Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(90))
+      withAnimation(.spring(response: 0.24, dampingFraction: 0.58)) {
+        isSendButtonPressed = false
+      }
+    }
   }
 }
