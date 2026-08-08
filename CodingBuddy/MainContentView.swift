@@ -8,6 +8,7 @@ import ClaudeCodeCore
 import CodingBuddyChat
 import CodingBuddyKit
 import InterviewKit
+import KnowledgeKit
 import SwiftUI
 
 struct MainContentView: View {
@@ -25,6 +26,7 @@ struct MainContentView: View {
   @State private var isReportGenerationRequested = false
   @State private var isChatInputFocusRequested = false
   @State private var isWhiteboardCreationRequested = false
+  @State private var isLessonLibraryPresented = false
   @Environment(\.colorScheme) private var colorScheme
 
   private let chatPanelWidth: CGFloat = 380
@@ -38,9 +40,7 @@ struct MainContentView: View {
           sidebarViewModel: sidebarVM,
           reservesWindowControls: true,
           newSessionSheetProvider: { AnyView(newSessionSheet(for: sidebarVM)) },
-          knowledgeLibrarySheetProvider: {
-            AnyView(KnowledgeLibraryView(library: chatService.knowledgeLibrary))
-          }
+          knowledgeLibrarySheetProvider: { AnyView(knowledgeLibrarySheet) }
         )
         .frame(width: sidebarWidth)
           .frame(maxHeight: .infinity)
@@ -118,7 +118,10 @@ struct MainContentView: View {
       vm.onStartSession = { request in
         contentMode.showSession()
         isReportGenerationRequested = false
-        selectedSurface = StudioSurface.defaultSurface(for: request.mode)
+        selectedSurface = StudioSurface.defaultSurface(
+          for: request.mode,
+          isLearningSession: request.knowledgeConfiguration?.activity == .learn
+        )
         Task {
           await chatService.initialize()
           await chatService.startNewSession(request)
@@ -162,6 +165,27 @@ struct MainContentView: View {
 
   private var shouldShowSidebar: Bool {
     panelLayoutState.showsSidebar
+  }
+
+  /// Shared by the sidebar's button and the Lesson surface, so picking another
+  /// item never requires a detour through the sidebar.
+  private var knowledgeLibrarySheet: some View {
+    KnowledgeLibraryView(
+      library: chatService.knowledgeLibrary,
+      onStartLearning: { studySpaceID, focus in
+        contentMode.showSession()
+        isLessonLibraryPresented = false
+        selectedSurface = .lesson
+        Task {
+          await chatService.startLearning(
+            studySpaceID: studySpaceID,
+            focus: focus,
+            startsNewSession: true
+          )
+          await sidebarViewModel?.loadSessions()
+        }
+      }
+    )
   }
 
   private var dashboardPanel: some View {
@@ -291,7 +315,8 @@ struct MainContentView: View {
   private var availableSurfaces: [StudioSurface] {
     StudioSurface.available(
       for: chatService.currentMode,
-      includesSources: shouldExposeKnowledgeSources
+      includesSources: shouldExposeKnowledgeSources,
+      includesLesson: chatService.isLearningSession
     )
   }
 
@@ -299,7 +324,8 @@ struct MainContentView: View {
     guard chatService.currentKnowledgeStudySpaceID != nil else {
       return false
     }
-    return chatService.currentKnowledgeSourcesAreOpen ||
+    return chatService.isLearningSession ||
+      chatService.currentKnowledgeSourcesAreOpen ||
       chatService.interviewSession.activeAttempt?.status == .evaluated
   }
 
@@ -314,6 +340,16 @@ struct MainContentView: View {
       // Same ZStack + opacity/hit-testing switching as Easel's canvas panel:
       // surfaces stay alive (editor buffers, whiteboard web view) while hidden.
       ZStack {
+        if availableSurfaces.contains(.lesson) {
+          LessonPanelView(
+            chatService: chatService,
+            onOpenLibrary: { isLessonLibraryPresented = true }
+          )
+          .opacity(selectedSurface == .lesson ? 1 : 0)
+          .allowsHitTesting(selectedSurface == .lesson)
+          .accessibilityHidden(selectedSurface != .lesson)
+        }
+
         KnowledgeSourcesView(
           library: chatService.knowledgeLibrary,
           studySpaceID: chatService.currentKnowledgeStudySpaceID,
@@ -370,23 +406,27 @@ struct MainContentView: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .onChange(of: chatService.currentMode) { _, newMode in
+    .sheet(isPresented: $isLessonLibraryPresented) {
+      knowledgeLibrarySheet
+    }
+    .onChange(of: chatService.currentMode) { _, _ in
       if !availableSurfaces.contains(selectedSurface) {
-        selectedSurface = StudioSurface.defaultSurface(for: newMode)
+        selectedSurface = currentDefaultSurface
       }
     }
     .onChange(of: chatService.currentSessionId) { _, _ in
       isReportGenerationRequested = false
       isWhiteboardCreationRequested = false
-      selectedSurface = StudioSurface.defaultSurface(for: chatService.currentMode)
-      // Restored sessions with a report jump straight to it.
-      if chatService.interviewSession.latestEvaluation != nil {
+      selectedSurface = currentDefaultSurface
+      // Restored sessions with a report jump straight to it — but a learning
+      // session never grades, so its lesson keeps the surface.
+      if chatService.interviewSession.latestEvaluation != nil, !chatService.isLearningSession {
         selectedSurface = .report
       }
     }
     .onChange(of: chatService.currentKnowledgeStudySpaceID) { _, _ in
       if !availableSurfaces.contains(selectedSurface) {
-        selectedSurface = StudioSurface.defaultSurface(for: chatService.currentMode)
+        selectedSurface = currentDefaultSurface
       }
     }
     .onChange(of: chatService.knowledgeLibrary.citationActivationCount) { _, _ in
@@ -526,7 +566,10 @@ struct MainContentView: View {
   }
 
   private var currentDefaultSurface: StudioSurface {
-    StudioSurface.defaultSurface(for: chatService.currentMode)
+    StudioSurface.defaultSurface(
+      for: chatService.currentMode,
+      isLearningSession: chatService.isLearningSession
+    )
   }
 
   private var studioWidthButtonSystemImage: String {

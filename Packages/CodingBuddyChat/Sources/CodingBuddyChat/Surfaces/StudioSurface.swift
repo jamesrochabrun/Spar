@@ -11,6 +11,7 @@ import InterviewKit
 /// statement is embedded there) and expose hints from a floating editor
 /// popover. Non-coding modes can still use the dedicated hints surface.
 public enum StudioSurface: String, CaseIterable, Identifiable {
+  case lesson      // the current study-plan lesson: task, source, response editor
   case sources     // read-only passages retrieved from an active Study Space
   case workspace   // SourceCodeEditorView over the attempt workspace dir, problem embedded
   case hints       // strategy guidance, hint budget, question recap
@@ -21,6 +22,7 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
 
   public var displayName: String {
     switch self {
+    case .lesson: return "Lesson"
     case .sources: return "Sources"
     case .workspace: return "Workspace"
     case .hints: return "Hints"
@@ -31,6 +33,7 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
 
   public var systemImage: String {
     switch self {
+    case .lesson: return "graduationcap"
     case .sources: return "books.vertical"
     case .workspace: return "chevron.left.forwardslash.chevron.right"
     case .hints: return "lightbulb"
@@ -41,7 +44,8 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
 
   public static func available(
     for mode: SessionMode?,
-    includesSources: Bool = false
+    includesSources: Bool = false,
+    includesLesson: Bool = false
   ) -> [StudioSurface] {
     let modeSurfaces: [StudioSurface]
     switch mode {
@@ -52,6 +56,13 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
     case .mockInterview, .drill, .practice, nil:
       modeSurfaces = [.workspace, .whiteboard, .report]
     }
+
+    // A learning session is driven by the lesson, and it never grades — so
+    // Lesson leads and Report (which would stay permanently empty) drops out.
+    if includesLesson {
+      return [.lesson, .sources] + modeSurfaces.filter { $0 != .report && $0 != .sources }
+    }
+
     guard includesSources else { return modeSurfaces }
     // Sources is a reference surface, never the primary one: it slots in
     // right after the mode's main working surface.
@@ -60,7 +71,12 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
 
   /// Sessions always open on the mode's working surface (workspace for coding
   /// modes) — grounded sessions reach Sources via the tab or a citation click.
-  public static func defaultSurface(for mode: SessionMode?) -> StudioSurface {
+  /// A learning session opens on the lesson itself.
+  public static func defaultSurface(
+    for mode: SessionMode?,
+    isLearningSession: Bool = false
+  ) -> StudioSurface {
+    if isLearningSession { return .lesson }
     switch mode {
     case .systemDesign: return .whiteboard
     case .behavioral: return .hints

@@ -16,9 +16,8 @@ public enum StudyPlanBlockParser {
     _ block: String,
     studySpaceID: String
   ) -> StudyPlan? {
-    guard let object = jsonObject(from: block) else { return nil }
-    if let schema = object["schema"] as? String,
-       !schema.hasPrefix("buddy-study-plan/") {
+    guard let object = jsonObject(from: block),
+          FencedJSONBlocks.matchesSchema(object["schema"], family: "buddy-study-plan/") else {
       return nil
     }
 
@@ -66,101 +65,22 @@ public enum StudyPlanBlockParser {
   }
 
   private static func fencedBlocks(in text: String) -> [String] {
-    var blocks: [String] = []
-    var current: [String]?
-
-    for line in text.components(separatedBy: "\n") {
-      let trimmed = line.trimmingCharacters(in: .whitespaces)
-      if current == nil {
-        if trimmed == "```\(fenceLanguage)" {
-          current = []
-        }
-      } else if trimmed == "```" || trimmed.hasPrefix("``` ") {
-        blocks.append(current?.joined(separator: "\n") ?? "")
-        current = nil
-      } else {
-        current?.append(line)
-      }
-    }
-
-    if let current, !current.isEmpty {
-      blocks.append(current.joined(separator: "\n"))
-    }
-    return blocks
+    FencedJSONBlocks.blocks(language: fenceLanguage, in: text)
   }
 
   private static func jsonObject(from raw: String) -> [String: Any]? {
-    let candidates = [raw, bracedObject(in: raw)].compactMap { $0 }
-    for candidate in candidates {
-      for text in [candidate, removingTrailingCommas(from: candidate)] {
-        guard let data = text.data(using: .utf8) else { continue }
-        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-          return object
-        }
-      }
-    }
-    return nil
-  }
-
-  private static func bracedObject(in text: String) -> String? {
-    guard let start = text.firstIndex(of: "{"),
-          let end = text.lastIndex(of: "}"),
-          start < end else {
-      return nil
-    }
-    return String(text[start...end])
-  }
-
-  private static func removingTrailingCommas(from text: String) -> String {
-    var result = ""
-    var pendingComma: String?
-
-    for character in text {
-      switch character {
-      case ",":
-        if let pendingComma {
-          result += pendingComma
-        }
-        pendingComma = ","
-      case " ", "\t", "\n", "\r":
-        if pendingComma != nil {
-          pendingComma?.append(character)
-        } else {
-          result.append(character)
-        }
-      case "}", "]":
-        pendingComma = nil
-        result.append(character)
-      default:
-        if let pending = pendingComma {
-          result += pending
-          pendingComma = nil
-        }
-        result.append(character)
-      }
-    }
-    if let pendingComma {
-      result += pendingComma
-    }
-    return result
+    FencedJSONBlocks.jsonObject(from: raw)
   }
 
   private static func nonemptyString(_ value: Any?) -> String? {
-    guard let string = value as? String else { return nil }
-    let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
+    FencedJSONBlocks.nonemptyString(value)
   }
 
   private static func stringArray(_ value: Any?) -> [String] {
-    ((value as? [Any]) ?? []).compactMap(nonemptyString)
+    FencedJSONBlocks.stringArray(value)
   }
 
   private static func slug(_ value: String) -> String {
-    let allowed = CharacterSet.alphanumerics
-    let parts = value
-      .lowercased()
-      .components(separatedBy: allowed.inverted)
-      .filter { !$0.isEmpty }
-    return parts.joined(separator: "-")
+    FencedJSONBlocks.slug(value)
   }
 }

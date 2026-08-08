@@ -89,4 +89,18 @@ final class CodexExtraArgumentsTests: XCTestCase {
 
     XCTAssertTrue(options.extraFlags.contains("--verbose"))
   }
+
+  @MainActor
+  func testRemovedFullAutoArgumentIsDiscarded() {
+    let options = CodexChatRuntime.makeOptions(
+      isFirstTurn: true,
+      currentSessionId: nil,
+      workingDirectory: "/tmp/easel",
+      extraArguments: ["--full-auto", "--verbose"],
+      configOverrides: [:]
+    )
+
+    XCTAssertFalse(options.extraFlags.contains("--full-auto"))
+    XCTAssertTrue(options.extraFlags.contains("--verbose"))
+  }
 }

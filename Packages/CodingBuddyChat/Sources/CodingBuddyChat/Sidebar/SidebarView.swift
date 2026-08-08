@@ -93,14 +93,14 @@ public struct SidebarView: View {
 
       Spacer()
 
-      Button("Study Spaces", systemImage: "books.vertical") {
+      Button("Learning Library", systemImage: "books.vertical") {
         isKnowledgeLibraryPresented = true
       }
       .labelStyle(.iconOnly)
       .font(.system(size: 13, weight: .medium))
       .buttonStyle(.plain)
       .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
-      .help("Study Spaces")
+      .help("Learning Library")
 
       Button(
         "Dashboard",

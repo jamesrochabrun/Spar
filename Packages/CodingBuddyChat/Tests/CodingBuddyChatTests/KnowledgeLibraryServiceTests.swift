@@ -174,4 +174,127 @@ struct KnowledgeLibraryServiceTests {
     #expect(context?.contains("<buddy-study-plan-state>") == true)
     #expect(context?.contains("\"nextItemID\":\"testing\"") == true)
   }
+
+  @Test
+  func checklistItemsCanBeCompletedInAnyOrderAndRevisited() async throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("KnowledgeLibraryServiceTests-\(UUID().uuidString)", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let storage = SQLiteKnowledgeStorage(applicationSupportDirectory: root)
+    let space = StudySpace(name: "SampleRepo")
+    try await storage.saveStudySpace(space)
+    let plan = StudyPlan(
+      id: "study-plan-\(space.id)",
+      studySpaceID: space.id,
+      title: "Learn SampleRepo",
+      summary: "A suggested path, not a gate.",
+      items: [
+        StudyPlanItem(
+          id: "foundations",
+          section: "Foundations",
+          title: "Foundations",
+          objective: "Map the modules."
+        ),
+        StudyPlanItem(
+          id: "advanced-flow",
+          section: "Architecture",
+          title: "Advanced Flow",
+          objective: "Trace a feature end to end.",
+          prerequisiteIDs: ["foundations"]
+        ),
+      ]
+    )
+    try await storage.saveStudyPlan(plan)
+
+    let library = KnowledgeLibraryService(storage: storage)
+    await library.load()
+    await library.setStudyPlanItemCompletion(
+      planID: plan.id,
+      itemID: "advanced-flow",
+      isCompleted: true
+    )
+
+    var stored = try #require(library.studyPlan(studySpaceID: space.id))
+    #expect(stored.items[0].isCompleted == false)
+    #expect(stored.items[1].isCompleted == true)
+    #expect(stored.nextIncompleteItem?.id == "foundations")
+
+    await library.setStudyPlanItemCompletion(
+      planID: plan.id,
+      itemID: "advanced-flow",
+      isCompleted: false
+    )
+
+    stored = try #require(library.studyPlan(studySpaceID: space.id))
+    #expect(stored.items[1].isCompleted == false)
+    #expect(stored.items[1].completedAt == nil)
+  }
+
+  @Test
+  func lessonSourceOpensByChunkIDOrByPath() async throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("KnowledgeLibraryServiceTests-\(UUID().uuidString)", isDirectory: true)
+    let repository = root.appendingPathComponent("SampleRepo", isDirectory: true)
+    let sources = repository.appendingPathComponent("Sources", isDirectory: true)
+    let support = root.appendingPathComponent("Support", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    try FileManager.default.createDirectory(at: sources, withIntermediateDirectories: true)
+    try "struct TimerModel { var remaining: Int }".write(
+      to: sources.appendingPathComponent("TimerModel.swift"),
+      atomically: true,
+      encoding: .utf8
+    )
+    try "final class NetworkClient { func fetch() {} }".write(
+      to: sources.appendingPathComponent("NetworkClient.swift"),
+      atomically: true,
+      encoding: .utf8
+    )
+
+    let storage = SQLiteKnowledgeStorage(applicationSupportDirectory: support)
+    let library = KnowledgeLibraryService(storage: storage)
+    let space = try #require(await library.addRepository(at: repository))
+
+    await library.browse(studySpaceID: space.id)
+    let timerChunk = try #require(
+      library.latestResults.first { $0.chunk.relativePath.hasSuffix("TimerModel.swift") }?.chunk
+    )
+
+    // A cited chunk id wins outright.
+    await library.openLessonSource(
+      studySpaceID: space.id,
+      path: "whatever/it/claims.swift",
+      chunkID: timerChunk.id
+    )
+    #expect(library.selectedChunk?.id == timerChunk.id)
+    #expect(library.errorMessage == nil)
+
+    // Without a chunk id, the repository-relative path resolves.
+    await library.openLessonSource(
+      studySpaceID: space.id,
+      path: "Sources/NetworkClient.swift",
+      chunkID: nil
+    )
+    #expect(library.selectedChunk?.relativePath == "Sources/NetworkClient.swift")
+
+    // A path relative to a package root still finds the indexed file.
+    await library.openLessonSource(
+      studySpaceID: space.id,
+      path: "TimerModel.swift",
+      chunkID: nil
+    )
+    #expect(library.selectedChunk?.relativePath == "Sources/TimerModel.swift")
+
+    // A path nothing was indexed under reports instead of jumping somewhere
+    // unrelated — a wrong file would teach the learner the wrong thing.
+    let before = library.selectedChunk?.id
+    await library.openLessonSource(
+      studySpaceID: space.id,
+      path: "Nowhere/Missing.swift",
+      chunkID: nil
+    )
+    #expect(library.selectedChunk?.id == before)
+    #expect(library.errorMessage?.contains("Missing.swift") == true)
+  }
 }

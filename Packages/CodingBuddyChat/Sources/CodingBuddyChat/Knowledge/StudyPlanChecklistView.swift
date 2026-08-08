@@ -22,11 +22,17 @@ struct StudyPlanChecklistView: View {
         Text("\(plan.completedItemCount) of \(plan.items.count) complete")
           .font(.callout)
       }
+      .accessibilityValue("\(plan.completedItemCount) of \(plan.items.count) complete")
 
       ForEach(sections, id: \.self) { section in
-        DisclosureGroup(section) {
+        VStack(alignment: .leading, spacing: 8) {
+          Text(section)
+            .font(.headline)
+            .padding(.top, 8)
+
           ForEach(plan.items.filter { $0.section == section }) { item in
             StudyPlanItemRow(
+              number: itemNumber(item),
               item: item,
               onCompletionChange: { isCompleted in
                 onCompletionChange(item, isCompleted)
@@ -39,6 +45,10 @@ struct StudyPlanChecklistView: View {
         }
       }
     }
+  }
+
+  private func itemNumber(_ item: StudyPlanItem) -> Int {
+    (plan.items.firstIndex(where: { $0.id == item.id }) ?? 0) + 1
   }
 
   private var sections: [String] {

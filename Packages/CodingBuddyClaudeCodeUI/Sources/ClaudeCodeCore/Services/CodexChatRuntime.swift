@@ -269,7 +269,7 @@ final class CodexChatRuntime: ChatRuntime {
 
     // User-configured extra arguments, appended to every launch.
     if !extraArguments.isEmpty {
-      options.extraFlags.append(contentsOf: extraArguments)
+      options.extraFlags.append(contentsOf: extraArguments.filter { $0 != "--full-auto" })
     }
 
     if isFirstTurn, let developerInstructions = tomlString(developerInstructions) {
@@ -283,7 +283,9 @@ final class CodexChatRuntime: ChatRuntime {
     if isFirstTurn {
       options.sandbox = .workspaceWrite
       options.approval = .never
-      options.fullAuto = true
+      // Codex CLI 0.147 removed `--full-auto`. The explicit workspace-write
+      // sandbox and approval policy above provide the intended unattended
+      // behavior without relying on that obsolete shorthand.
       if let workingDirectory, !workingDirectory.isEmpty {
         options.changeDirectory = workingDirectory
       }
@@ -320,10 +322,6 @@ final class CodexChatRuntime: ChatRuntime {
     if let sandbox = options.sandbox {
       parts.append("--sandbox")
       parts.append(sandbox.rawValue)
-    }
-
-    if options.fullAuto {
-      parts.append("--full-auto")
     }
 
     if let changeDirectory = options.changeDirectory {

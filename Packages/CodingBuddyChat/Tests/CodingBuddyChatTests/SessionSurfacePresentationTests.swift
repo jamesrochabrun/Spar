@@ -35,6 +35,30 @@ struct SessionSurfacePresentationTests {
     let groundedSystemDesign = StudioSurface.available(for: .systemDesign, includesSources: true)
     #expect(groundedSystemDesign.first == .whiteboard)
     #expect(groundedSystemDesign[1] == .sources)
+    #expect(!regular.contains(.lesson))
+  }
+
+  @Test
+  func learningSessionsLeadWithTheLessonAndDropTheReport() {
+    let learning = StudioSurface.available(
+      for: .practice,
+      includesSources: true,
+      includesLesson: true
+    )
+
+    // The lesson is the working surface; Sources sits next to it because every
+    // task cites one.
+    #expect(learning.first == .lesson)
+    #expect(learning[1] == .sources)
+    // A learning session never grades, so a permanently empty Report tab would
+    // just be dead weight.
+    #expect(!learning.contains(.report))
+    // No duplicate Sources tab when both flags are on.
+    #expect(learning.count(where: { $0 == .sources }) == 1)
+
+    #expect(StudioSurface.defaultSurface(for: .practice, isLearningSession: true) == .lesson)
+    // The flag drives it, not the mode: a learning session is always .practice.
+    #expect(StudioSurface.defaultSurface(for: .practice) == .workspace)
   }
 
   @Test

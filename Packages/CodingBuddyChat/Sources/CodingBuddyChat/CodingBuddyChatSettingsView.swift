@@ -36,13 +36,7 @@ public struct CodingBuddyChatSettingsView: View {
       },
       extraSections: chatService.map { service in
         {
-          AnyView(Group {
-            InterviewSettingsSection(settings: service.interviewSettings)
-            StudyPlanSettingsSection(
-              library: service.knowledgeLibrary,
-              chatService: service
-            )
-          })
+          AnyView(InterviewSettingsSection(settings: service.interviewSettings))
         }
       }
     )

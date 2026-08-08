@@ -61,13 +61,37 @@ struct BuddyAgentInstructionsTests {
       knowledgeConfiguration: closedBookInterview
     )
 
+    // Every provider gets the lesson loop: the fence, the one-task-per-turn
+    // rule, and the bans that the loose prose contract failed to enforce.
     for prompt in [learnPrefixes.claude, learnPrefixes.codex, learnPrefixes.api] {
       #expect(prompt.contains("Source-grounded learning session"))
-      #expect(prompt.contains("citation"))
       #expect(prompt.contains("untrusted"))
       #expect(prompt.contains("buddy-study-plan-state"))
       #expect(prompt.contains("[STUDY PLAN RANDOM]"))
+      #expect(prompt.contains("[LESSON RESPONSE]"))
+      #expect(prompt.contains("[LESSON STUCK]"))
+      #expect(prompt.contains("buddy-lesson/v1"))
+      #expect(prompt.contains("scenario_markdown"))
+      #expect(prompt.contains("inspect_steps"))
+      #expect(prompt.contains("reply_scaffold"))
+      #expect(prompt.contains("item_complete"))
+      #expect(prompt.contains("feedback_markdown"))
+      #expect(prompt.contains("teaches_markdown"))
+      #expect(prompt.contains("one task per turn"))
+      #expect(prompt.contains("never ask the learner to invent a question") ||
+              prompt.contains("Never ask the learner to invent"))
+      #expect(prompt.contains("repeat a fact you just stated") ||
+              prompt.contains("repeat a\nfilename") ||
+              prompt.contains("Never ask them to repeat a"))
+      #expect(prompt.contains("No long articles") ||
+              prompt.contains("never as an article"))
     }
+    // The learn prompts stay agent-led — the old "suggest a question for the
+    // user to ask" phrasing is what produced the aimless sessions.
+    #expect(learnPrefixes.claude.contains("Be agent-led"))
+    #expect(!learnPrefixes.claude.contains("check-for-understanding"))
+    // Compact stays compact even carrying the new contract.
+    #expect(learnPrefixes.api.count < learnPrefixes.claude.count)
     for prompt in [interviewPrefixes.claude, interviewPrefixes.codex, interviewPrefixes.api] {
       #expect(prompt.contains("Source-grounded interview session"))
       #expect(prompt.contains("closed book"))
@@ -84,10 +108,64 @@ struct BuddyAgentInstructionsTests {
     #expect(directive.contains("[CREATE STUDY PLAN]"))
     #expect(directive.contains("buddy-study-plan/v1"))
     #expect(directive.contains("session-flow"))
+    #expect(directive.contains("Do not create or update any plan file"))
+    #expect(directive.contains("separate Practice session"))
+    #expect(!directive.contains("begin its first item"))
 
     #expect(BuddyAgentInstructions.studyPlanRepairDirective().contains("buddy-study-plan"))
-    #expect(BuddyAgentInstructions.studyTopicRequestMessage(itemID: "storage").contains("storage"))
+    let topicRequest = BuddyAgentInstructions.studyTopicRequestMessage(
+      itemID: "storage",
+      title: "Understand Storage",
+      itemNumber: 1,
+      totalItemCount: 12
+    )
+    #expect(topicRequest.hasPrefix("Start Item 1 of 12: “Understand Storage”."))
+    #expect(topicRequest.contains("[STUDY PLAN ITEM: storage]"))
+    #expect(topicRequest.contains("buddy-lesson"))
+    #expect(topicRequest.contains("step 1"))
+    #expect(topicRequest.contains("Do not ask me to invent a question"))
+    #expect(topicRequest.contains("wait for my response"))
     #expect(BuddyAgentInstructions.randomStudyTopicMessage.contains("[STUDY PLAN RANDOM]"))
+    #expect(BuddyAgentInstructions.nextStudyTopicMessage.contains("buddy-lesson"))
+  }
+
+  @Test
+  func lessonTurnMessagesDriveTheLoopWithoutRevealingAnswers() {
+    let response = BuddyAgentInstructions.lessonResponseMessage(
+      "  Note: the buffer is flushed on a terminal event.  "
+    )
+    #expect(response.hasPrefix("[LESSON RESPONSE]"))
+    #expect(response.contains("Note: the buffer is flushed on a terminal event."))
+    // The marker must not be padded with the learner's stray whitespace.
+    #expect(!response.hasSuffix(" "))
+
+    let stuck = BuddyAgentInstructions.lessonStuckMessage
+    #expect(stuck.contains("[LESSON STUCK]"))
+    #expect(stuck.contains("Do not answer it for me"))
+    #expect(stuck.contains("same step"))
+
+    let repair = BuddyAgentInstructions.lessonRepairDirective()
+    #expect(repair.contains("[LESSON PARSE ERROR]"))
+    #expect(repair.contains("buddy-lesson/v1"))
+    #expect(repair.contains("inspect_steps"))
+  }
+
+  @Test
+  func lessonContractIsScopedToLearningSessions() {
+    // The lesson loop only ships with a learn-activity session: a plain
+    // interview prompt must not carry a contract it can never satisfy.
+    let plain = BuddyAgentInstructions.prefixes(for: .practice)
+    let interview = BuddyAgentInstructions.prefixes(
+      for: .mockInterview,
+      knowledgeConfiguration: KnowledgeSessionConfiguration(
+        studySpaceID: "space",
+        activity: .interview
+      )
+    )
+
+    for prompt in [plain.claude, plain.api, interview.claude, interview.api] {
+      #expect(!prompt.contains("buddy-lesson"))
+    }
   }
 
   @Test

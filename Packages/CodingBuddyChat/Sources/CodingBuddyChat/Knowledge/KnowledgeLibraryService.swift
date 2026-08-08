@@ -237,6 +237,64 @@ public final class KnowledgeLibraryService {
     citationActivationCount += 1
   }
 
+  /// Opens the source a lesson cites. Prefers the retrieved chunk id; falls
+  /// back to matching the repository-relative path, because the agent can name
+  /// a real file that no retrieved passage happened to cover. Lists every
+  /// passage of the matched file so the learner can read around the citation.
+  public func openLessonSource(
+    studySpaceID: String,
+    path: String,
+    chunkID: String?
+  ) async {
+    if let chunkID, let chunk = try? await storage.chunk(id: chunkID) {
+      await loadSiblingPassages(studySpaceID: studySpaceID, relativePath: chunk.relativePath)
+      selectedChunk = chunk
+      errorMessage = nil
+      citationActivationCount += 1
+      return
+    }
+
+    guard let match = await chunk(studySpaceID: studySpaceID, matchingPath: path) else {
+      // Nothing indexed under that path: leave the panel untouched rather than
+      // dropping the learner into an unrelated file.
+      errorMessage = "No indexed passage found for “\(path)”."
+      return
+    }
+    await loadSiblingPassages(studySpaceID: studySpaceID, relativePath: match.relativePath)
+    selectedChunk = match
+    errorMessage = nil
+    citationActivationCount += 1
+  }
+
+  private func loadSiblingPassages(studySpaceID: String, relativePath: String) async {
+    let all = (try? await storage.chunks(studySpaceID: studySpaceID, limit: 5_000)) ?? []
+    let siblings = all.filter { $0.relativePath == relativePath }
+    guard !siblings.isEmpty else { return }
+    latestResults = siblings.map { KnowledgeSearchResult(chunk: $0, score: 0) }
+  }
+
+  private func chunk(
+    studySpaceID: String,
+    matchingPath path: String
+  ) async -> KnowledgeChunk? {
+    let all = (try? await storage.chunks(studySpaceID: studySpaceID, limit: 5_000)) ?? []
+    let needle = path.trimmingCharacters(in: CharacterSet(charactersIn: "./ "))
+    guard !needle.isEmpty else { return nil }
+
+    if let exact = all.first(where: { $0.relativePath == needle }) {
+      return exact
+    }
+    // The agent may cite a path relative to a package root while the index
+    // stores it relative to the repository root (or vice versa).
+    if let suffix = all.first(where: {
+      $0.relativePath.hasSuffix("/" + needle) || needle.hasSuffix("/" + $0.relativePath)
+    }) {
+      return suffix
+    }
+    let fileName = (needle as NSString).lastPathComponent
+    return all.first { ($0.relativePath as NSString).lastPathComponent == fileName }
+  }
+
   public func makeContext(
     configuration: KnowledgeSessionConfiguration,
     query: String

@@ -85,6 +85,48 @@ public final class ChatService: ChatServiceProtocol {
     currentKnowledgeConfiguration?.sourceAccess == .openBook
   }
 
+  /// True while the visible session is a repository learning session, which is
+  /// what puts the Lesson surface on screen.
+  public var isLearningSession: Bool {
+    currentKnowledgeConfiguration?.activity == .learn
+  }
+
+  /// The lesson the visible session is on. Keyed by view model so switching
+  /// sessions never shows another session's lesson.
+  public var currentLesson: Lesson? {
+    guard let chatViewModel else { return nil }
+    return lessonByViewModelID[ObjectIdentifier(chatViewModel)]
+  }
+
+  public var currentStudyPlan: StudyPlan? {
+    knowledgeLibrary.studyPlan(studySpaceID: currentKnowledgeStudySpaceID)
+  }
+
+  public var currentStudySpaceName: String? {
+    knowledgeLibrary.studySpace(id: currentKnowledgeStudySpaceID)?.name
+  }
+
+  /// The study-plan item the lesson panel is showing, resolved against the
+  /// saved plan so completion state stays authoritative.
+  public var currentLessonItem: StudyPlanItem? {
+    guard let itemID = currentLesson?.itemID ?? lastRequestedStudyItemID else { return nil }
+    return currentStudyPlan?.items.first { $0.id == itemID }
+  }
+
+  /// 1-based position of the current item in the plan.
+  public var currentLessonItemNumber: Int? {
+    guard let item = currentLessonItem,
+          let index = currentStudyPlan?.items.firstIndex(where: { $0.id == item.id }) else {
+      return nil
+    }
+    return index + 1
+  }
+
+  /// True between sending a lesson turn and the fence coming back.
+  public var isLessonLoading: Bool {
+    chatViewModel?.isLoading == true
+  }
+
   /// On-device MLX model management, shared by the chat runtime and the
   /// settings download UI. One instance app-wide — the loaded model is the
   /// process's GPU tenant.
@@ -134,6 +176,12 @@ public final class ChatService: ChatServiceProtocol {
   private var pendingStudyPlanGenerationSpaceIDs: Set<String> = []
   private var studyPlanRepairAttemptsBySpaceID: [String: Int] = [:]
   private let maxStudyPlanRepairAttempts = 2
+  private var lessonByViewModelID: [ObjectIdentifier: Lesson] = [:]
+  /// Item id of the most recent lesson turn we asked for, used to attribute a
+  /// fence that omitted `item_id` and to scope the repair loop.
+  private var lastRequestedStudyItemID: String?
+  private var lessonRepairAttemptsByItemID: [String: Int] = [:]
+  private let maxLessonRepairAttempts = 1
 
   // MARK: - Init
 
@@ -349,11 +397,16 @@ public final class ChatService: ChatServiceProtocol {
 
   public func startLearning(
     studySpaceID: String,
-    focus: StudyPlanFocus = .next
+    focus: StudyPlanFocus = .next,
+    startsNewSession: Bool = false
   ) async {
-    if currentKnowledgeConfiguration?.studySpaceID == studySpaceID,
-       currentKnowledgeConfiguration?.activity == .learn,
-       let plan = knowledgeLibrary.studyPlan(studySpaceID: studySpaceID) {
+    let plan = knowledgeLibrary.studyPlan(studySpaceID: studySpaceID)
+    if Self.shouldReuseLearningSession(
+      currentConfiguration: currentKnowledgeConfiguration,
+      requestedStudySpaceID: studySpaceID,
+      hasPlan: plan != nil,
+      startsNewSession: startsNewSession
+    ), let plan {
       sendMessageToViewModel(studyMessage(focus: focus, plan: plan))
       return
     }
@@ -370,6 +423,64 @@ public final class ChatService: ChatServiceProtocol {
       ),
       studyPlanFocus: focus
     ))
+  }
+
+  // MARK: - Lesson loop
+
+  /// Sends the learner's answer to the current task. The agent replies with a
+  /// fence carrying feedback plus the next task, which lands in `currentLesson`.
+  public func submitLessonResponse(_ response: String) {
+    let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, isLearningSession else { return }
+    sendMessageToViewModel(BuddyAgentInstructions.lessonResponseMessage(trimmed))
+  }
+
+  /// "I'm stuck" — narrows the current task without revealing the answer.
+  public func requestLessonHelp() {
+    guard isLearningSession, currentLesson != nil else { return }
+    sendMessageToViewModel(BuddyAgentInstructions.lessonStuckMessage)
+  }
+
+  /// Learner-owned completion. The agent never marks items; it only suggests.
+  public func setCurrentLessonItemCompletion(_ isCompleted: Bool) async {
+    guard let plan = currentStudyPlan,
+          let itemID = currentLesson?.itemID ?? lastRequestedStudyItemID,
+          plan.items.contains(where: { $0.id == itemID }) else {
+      return
+    }
+    await knowledgeLibrary.setStudyPlanItemCompletion(
+      planID: plan.id,
+      itemID: itemID,
+      isCompleted: isCompleted
+    )
+  }
+
+  /// Continues in the same session with the next incomplete plan item.
+  public func startNextLessonItem() async {
+    guard let studySpaceID = currentKnowledgeStudySpaceID else { return }
+    await startLearning(studySpaceID: studySpaceID, focus: .next)
+  }
+
+  /// Reveals the passage a lesson cites on the Sources surface.
+  public func openLessonSource(_ source: Lesson.SourceReference) async {
+    guard let studySpaceID = currentKnowledgeStudySpaceID else { return }
+    await knowledgeLibrary.openLessonSource(
+      studySpaceID: studySpaceID,
+      path: source.path,
+      chunkID: source.chunkID
+    )
+  }
+
+  static func shouldReuseLearningSession(
+    currentConfiguration: KnowledgeSessionConfiguration?,
+    requestedStudySpaceID: String,
+    hasPlan: Bool,
+    startsNewSession: Bool
+  ) -> Bool {
+    !startsNewSession &&
+      hasPlan &&
+      currentConfiguration?.studySpaceID == requestedStudySpaceID &&
+      currentConfiguration?.activity == .learn
   }
 
   /// Legacy entry point (pre-interview flows): starts an untimed practice session.
@@ -452,15 +563,50 @@ public final class ChatService: ChatServiceProtocol {
   private func studyMessage(focus: StudyPlanFocus, plan: StudyPlan?) -> String {
     switch focus {
     case .next:
-      return BuddyAgentInstructions.nextStudyTopicMessage
+      guard let item = plan?.nextIncompleteItem else {
+        beginLessonTurn(itemID: nil)
+        return BuddyAgentInstructions.nextStudyTopicMessage
+      }
+      return studyTopicMessage(for: item, plan: plan)
     case .random:
       let candidates = plan?.items.filter { !$0.isCompleted }
-      let item = candidates?.randomElement() ?? plan?.items.randomElement()
-      return item.map {
-        BuddyAgentInstructions.studyTopicRequestMessage(itemID: $0.id)
-      } ?? BuddyAgentInstructions.randomStudyTopicMessage
+      guard let item = candidates?.randomElement() ?? plan?.items.randomElement() else {
+        beginLessonTurn(itemID: nil)
+        return BuddyAgentInstructions.randomStudyTopicMessage
+      }
+      return studyTopicMessage(for: item, plan: plan)
     case .item(let itemID):
-      return BuddyAgentInstructions.studyTopicRequestMessage(itemID: itemID)
+      guard let item = plan?.items.first(where: { $0.id == itemID }) else {
+        beginLessonTurn(itemID: itemID)
+        return BuddyAgentInstructions.studyTopicRequestMessage(itemID: itemID)
+      }
+      return studyTopicMessage(for: item, plan: plan)
+    }
+  }
+
+  private func studyTopicMessage(for item: StudyPlanItem, plan: StudyPlan?) -> String {
+    beginLessonTurn(itemID: item.id)
+    let itemNumber = plan?.items.firstIndex(where: { $0.id == item.id }).map { $0 + 1 }
+    return BuddyAgentInstructions.studyTopicRequestMessage(
+      itemID: item.id,
+      title: item.title,
+      itemNumber: itemNumber,
+      totalItemCount: plan?.items.count
+    )
+  }
+
+  /// Arms the lesson panel for a new item: a lesson from a *different* item is
+  /// cleared so the panel shows "preparing" instead of stale content, while a
+  /// re-request of the same item keeps its card on screen until the next fence.
+  private func beginLessonTurn(itemID: String?) {
+    lastRequestedStudyItemID = itemID
+    guard let chatViewModel else { return }
+    let key = ObjectIdentifier(chatViewModel)
+    if lessonByViewModelID[key]?.itemID != itemID {
+      lessonByViewModelID[key] = nil
+    }
+    if let itemID {
+      lessonRepairAttemptsByItemID[itemID] = 0
     }
   }
 
@@ -806,6 +952,8 @@ public final class ChatService: ChatServiceProtocol {
             sendMessageToViewModel(BuddyAgentInstructions.studyPlanRepairDirective())
           }
         }
+
+        captureLesson(in: message.content, viewModel: viewModel)
       }
 
       for result in results {
@@ -831,6 +979,57 @@ public final class ChatService: ChatServiceProtocol {
         sendMessageToViewModel(BuddyAgentInstructions.evaluationRepairDirective())
       }
     }
+  }
+
+  /// Stores the turn's `buddy-lesson` fence for the Lesson surface, backfilling
+  /// what the agent left out from the saved plan. When a lesson was requested
+  /// and no fence arrived, asks once for the block rather than leaving the
+  /// panel blank next to a wall of chat prose.
+  private func captureLesson(in messageText: String, viewModel: ChatViewModel) {
+    guard let lesson = LessonBlockParser.parseBlocks(in: messageText).last else {
+      // Only chase a missing fence when the panel has nothing to show for the
+      // item we just started. Once a task is on screen, a prose-only turn is a
+      // legitimate answer to a side question, not a contract violation.
+      guard let itemID = lastRequestedStudyItemID,
+            lessonByViewModelID[ObjectIdentifier(viewModel)] == nil,
+            (lessonRepairAttemptsByItemID[itemID] ?? 0) < maxLessonRepairAttempts else {
+        return
+      }
+      lessonRepairAttemptsByItemID[itemID] = (lessonRepairAttemptsByItemID[itemID] ?? 0) + 1
+      sendMessageToViewModel(BuddyAgentInstructions.lessonRepairDirective())
+      return
+    }
+
+    let resolved = Self.resolveLesson(
+      lesson,
+      requestedItemID: lastRequestedStudyItemID,
+      plan: currentStudyPlan
+    )
+    if !resolved.itemID.isEmpty {
+      lastRequestedStudyItemID = resolved.itemID
+    }
+    lessonByViewModelID[ObjectIdentifier(viewModel)] = resolved
+  }
+
+  /// Reconciles a parsed fence with what the app already knows: the agent can
+  /// omit `item_id`/`item_title`, or name an item the saved plan doesn't have.
+  /// Completion is keyed on the item id, so a wrong one would silently orphan
+  /// the learner's checkmark — the requested item wins whenever the fence's id
+  /// isn't in the plan.
+  static func resolveLesson(
+    _ lesson: Lesson,
+    requestedItemID: String?,
+    plan: StudyPlan?
+  ) -> Lesson {
+    var resolved = lesson
+    let isKnownItem = plan?.items.contains { $0.id == resolved.itemID } == true
+    if !isKnownItem, let requestedItemID {
+      resolved.itemID = requestedItemID
+    }
+    if resolved.itemTitle.isEmpty {
+      resolved.itemTitle = plan?.items.first { $0.id == resolved.itemID }?.title ?? ""
+    }
+    return resolved
   }
 
   // MARK: - Context plumbing

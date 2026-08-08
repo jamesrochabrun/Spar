@@ -2,6 +2,7 @@ import KnowledgeKit
 import SwiftUI
 
 struct StudyPlanItemRow: View {
+  let number: Int
   let item: StudyPlanItem
   let onCompletionChange: (Bool) -> Void
   let onStudy: () -> Void
@@ -17,6 +18,12 @@ struct StudyPlanItemRow: View {
       .buttonStyle(.plain)
       .foregroundStyle(item.isCompleted ? .green : .secondary)
       .accessibilityLabel(item.isCompleted ? "Mark \(item.title) incomplete" : "Mark \(item.title) complete")
+
+      Text("\(number).")
+        .font(.callout.monospacedDigit())
+        .foregroundStyle(.secondary)
+        .frame(minWidth: 22, alignment: .trailing)
+        .accessibilityHidden(true)
 
       VStack(alignment: .leading) {
         Text(item.title)
@@ -38,8 +45,10 @@ struct StudyPlanItemRow: View {
 
       Spacer()
 
-      Button("Study", systemImage: "book.pages", action: onStudy)
+      Button("Start", systemImage: "play.fill", action: onStudy)
+        .buttonStyle(.bordered)
         .controlSize(.small)
+        .help("Open item \(number) in the Lesson panel — Buddy sets the first task")
     }
     .padding(.vertical, 4)
   }

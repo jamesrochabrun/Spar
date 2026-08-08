@@ -19,6 +19,9 @@ final class CodexChatRuntimeOptionsTests: XCTestCase {
     XCTAssertTrue(options.skipGitRepoCheck)
     XCTAssertEqual(options.changeDirectory, "/tmp/easel")
     XCTAssertTrue(options.jsonEvents)
+    XCTAssertEqual(options.sandbox, .workspaceWrite)
+    XCTAssertEqual(options.approval, .never)
+    XCTAssertFalse(options.fullAuto)
   }
 
   @MainActor
@@ -78,6 +81,9 @@ final class CodexChatRuntimeOptionsTests: XCTestCase {
 
     XCTAssertTrue(command.contains("--model 'gpt-5.4'"))
     XCTAssertTrue(command.contains("--cd '/tmp/easel path'"))
+    XCTAssertTrue(command.contains("--sandbox workspace-write"))
+    XCTAssertTrue(command.contains("'approval=never'"))
+    XCTAssertFalse(command.contains("--full-auto"))
     XCTAssertTrue(command.hasSuffix(" -"))
   }
 
