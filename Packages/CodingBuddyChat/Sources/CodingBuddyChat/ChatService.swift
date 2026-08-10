@@ -56,6 +56,9 @@ public final class ChatService: ChatServiceProtocol {
   public private(set) var initError: Error?
   public private(set) var currentSessionId: String?
   public private(set) var currentWorkingDirectory: String?
+  /// Changes after each visible assistant turn so workspace surfaces can pick
+  /// up files written by provider tools without discarding unsaved user edits.
+  public private(set) var workspaceRevision = 0
   public private(set) var currentWorkspaceUsageSummary: SessionUsageSummary = .zero
   public private(set) var sessionStorage: SessionStorageProtocol
   public var mcpToolsDiscoveryService: MCPToolsDiscoveryService { mcpToolsDiscovery }
@@ -924,6 +927,7 @@ public final class ChatService: ChatServiceProtocol {
   ) {
     guard !capturedAssistantMessageIds.contains(message.id) else { return }
     capturedAssistantMessageIds.insert(message.id)
+    workspaceRevision += 1
 
     let attempt = interviewSession.activeAttempt
     let results = StructuredBlockCapture.capture(
@@ -1129,8 +1133,17 @@ public final class ChatService: ChatServiceProtocol {
       return ""
     }
 
-    let phase: BuddyAgentInstructions.AttemptPhase =
-      attempt.status == .awaitingEvaluation ? .awaitingEvaluation : .inProgress
+    let phase: BuddyAgentInstructions.AttemptPhase
+    switch attempt.status {
+    case .inProgress:
+      phase = .inProgress
+    case .awaitingEvaluation:
+      phase = .awaitingEvaluation
+    case .evaluated:
+      phase = .evaluated
+    case .abandoned:
+      phase = .abandoned
+    }
 
     return BuddyAgentInstructions.appendingHiddenContext(
       nil,

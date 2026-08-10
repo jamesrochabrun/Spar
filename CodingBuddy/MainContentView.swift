@@ -394,6 +394,7 @@ struct MainContentView: View {
           WorkspaceEditorView(
             workspacePath: chatService.interviewSession.activeAttempt?.workspacePath,
             question: chatService.interviewSession.activeQuestion,
+            externalRefreshToken: chatService.workspaceRevision,
             onReviewRequested: { fileName in
               chatService.requestReview(fileName: fileName)
             },

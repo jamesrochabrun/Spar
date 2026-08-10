@@ -41,7 +41,7 @@ public enum CodeRunLanguage: String, CaseIterable, Sendable {
 
 public struct CodeRunResult: Sendable, Equatable {
   public let language: CodeRunLanguage
-  /// Human-readable command that produced this result, e.g. "swift solution.swift".
+  /// Human-readable command that produced this result, e.g. "swiftc solution.swift && ./solution".
   public let commandLine: String
   public let exitCode: Int32
   public let standardOutput: String
@@ -175,7 +175,14 @@ public struct ProcessCodeRunner: CodeRunning {
     }
 
     let workingDirectory = fileURL.deletingLastPathComponent()
-    for invocation in try invocations(for: language, fileURL: fileURL) {
+    let plan = try executionPlan(for: language, fileURL: fileURL)
+    defer {
+      if let temporaryDirectory = plan.temporaryDirectory {
+        try? FileManager.default.removeItem(at: temporaryDirectory)
+      }
+    }
+
+    for invocation in plan.invocations {
       let result = try await execute(invocation, language: language, workingDirectory: workingDirectory)
       // A passing check phase (e.g. tsc --noEmit) is silent; move on to the run.
       if invocation.isCheck && result.succeeded { continue }
@@ -190,22 +197,75 @@ public struct ProcessCodeRunner: CodeRunning {
     let executable: URL
     let arguments: [String]
     let isCheck: Bool
+    let commandLine: String?
   }
 
-  private func invocations(for language: CodeRunLanguage, fileURL: URL) throws -> [Invocation] {
+  private struct ExecutionPlan {
+    let invocations: [Invocation]
+    let temporaryDirectory: URL?
+  }
+
+  private func executionPlan(
+    for language: CodeRunLanguage,
+    fileURL: URL
+  ) throws -> ExecutionPlan {
     let fileName = fileURL.lastPathComponent
     switch language {
     case .swift:
-      let swift = try requireTool(candidates: ["swift"], language: language)
-      return [Invocation(executable: swift, arguments: [fileName], isCheck: false)]
+      // Compiling first avoids the Swift interpreter's JIT linker, which can
+      // fail to resolve platform-availability symbols used by SwiftUI.
+      let swiftc = try requireTool(candidates: ["swiftc"], language: language)
+      let buildDirectory = FileManager.default.temporaryDirectory.appending(
+        path: "codingbuddy-swift-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+      )
+      try FileManager.default.createDirectory(
+        at: buildDirectory,
+        withIntermediateDirectories: true
+      )
+      let output = buildDirectory.appending(path: "solution")
+      let displayCommand = "swiftc \(fileName) && ./solution"
+      return ExecutionPlan(
+        invocations: [
+          Invocation(
+            executable: swiftc,
+            arguments: [fileName, "-o", output.path],
+            isCheck: true,
+            commandLine: "swiftc \(fileName)"
+          ),
+          Invocation(
+            executable: output,
+            arguments: [],
+            isCheck: false,
+            commandLine: displayCommand
+          ),
+        ],
+        temporaryDirectory: buildDirectory
+      )
 
     case .python:
       let python = try requireTool(candidates: ["python3", "python"], language: language)
-      return [Invocation(executable: python, arguments: [fileName], isCheck: false)]
+      return ExecutionPlan(
+        invocations: [Invocation(
+          executable: python,
+          arguments: [fileName],
+          isCheck: false,
+          commandLine: nil
+        )],
+        temporaryDirectory: nil
+      )
 
     case .javascript:
       let node = try requireTool(candidates: ["node"], language: language)
-      return [Invocation(executable: node, arguments: [fileName], isCheck: false)]
+      return ExecutionPlan(
+        invocations: [Invocation(
+          executable: node,
+          arguments: [fileName],
+          isCheck: false,
+          commandLine: nil
+        )],
+        temporaryDirectory: nil
+      )
 
     case .typescript:
       var plan: [Invocation] = []
@@ -213,7 +273,8 @@ public struct ProcessCodeRunner: CodeRunning {
         plan.append(Invocation(
           executable: tsc,
           arguments: ["--noEmit", "--skipLibCheck", "--target", "es2022", fileName],
-          isCheck: true
+          isCheck: true,
+          commandLine: nil
         ))
       }
       let runners: [(name: String, arguments: [String])] = [
@@ -226,8 +287,13 @@ public struct ProcessCodeRunner: CodeRunning {
             let executable = findExecutable(candidates: [runner.name]) else {
         throw CodeRunnerError.toolNotFound(language: language, candidates: runners.map(\.name))
       }
-      plan.append(Invocation(executable: executable, arguments: runner.arguments, isCheck: false))
-      return plan
+      plan.append(Invocation(
+        executable: executable,
+        arguments: runner.arguments,
+        isCheck: false,
+        commandLine: nil
+      ))
+      return ExecutionPlan(invocations: plan, temporaryDirectory: nil)
     }
   }
 
@@ -395,8 +461,8 @@ public struct ProcessCodeRunner: CodeRunning {
 
     return CodeRunResult(
       language: language,
-      commandLine: ([invocation.executable.lastPathComponent] + invocation.arguments)
-        .joined(separator: " "),
+      commandLine: invocation.commandLine
+        ?? ([invocation.executable.lastPathComponent] + invocation.arguments).joined(separator: " "),
       exitCode: exitCode,
       standardOutput: stdoutCapture.buffer.text,
       standardError: stderrCapture.buffer.text,

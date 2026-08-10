@@ -71,6 +71,9 @@ struct BuddyAgentInstructionsTests {
         #expect(prompt.contains("commented-out") || prompt.contains("comment out"))
         #expect(prompt.contains("indentation"))
         #expect(prompt.contains("2 spaces"))
+        #expect(prompt.contains("primary file"))
+        #expect(prompt.contains("edit") && prompt.contains("in place"))
+        #expect(prompt.contains("evaluated") && prompt.contains("writable"))
       }
     }
   }
@@ -332,6 +335,37 @@ struct BuddyAgentInstructionsTests {
     #expect(context.contains("timer: 21:34 remaining of 35:00"))
     #expect(context.contains("hints: 1 used of 3"))
     #expect(context.contains("workspace: /Users/x/Documents/CodingBuddy/Workspaces/2026-07-31-longest-substring"))
+    #expect(context.contains("primary file: solution.swift"))
+  }
+
+  @Test
+  func evaluatedContextKeepsWorkspaceIdentityWithoutPretendingTheAttemptIsLive() {
+    let attempt = InterviewAttempt(
+      provider: "claude",
+      mode: .practice,
+      status: .evaluated,
+      workspacePath: "/Users/x/Documents/CodingBuddy/Workspaces/finished"
+    )
+    let question = Question(
+      mode: .practice,
+      title: "Search",
+      promptMarkdown: "…",
+      difficulty: .medium,
+      languageHint: "python"
+    )
+
+    let context = BuddyAgentInstructions.appendingHiddenContext(
+      nil,
+      attempt: attempt,
+      question: question,
+      timerRemaining: nil,
+      phase: .evaluated
+    )
+
+    #expect(context.contains("phase: evaluated"))
+    #expect(context.contains("workspace: /Users/x/Documents/CodingBuddy/Workspaces/finished"))
+    #expect(context.contains("primary file: solution.py"))
+    #expect(!context.contains("timer:"))
   }
 
   @Test

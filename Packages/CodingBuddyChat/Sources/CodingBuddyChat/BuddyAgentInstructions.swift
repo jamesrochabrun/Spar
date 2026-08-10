@@ -113,6 +113,15 @@ public enum BuddyAgentInstructions {
     exactly 2 spaces. Never flatten a multiline block or prefix its lines with \
     comment markers. Re-read the saved file and correct its formatting before \
     handing control to the candidate.
+    - The `primary file` named in <buddy-context> is the source currently shown \
+    in the candidate's editor. When asked to update, fix, or implement the \
+    current solution, inspect and edit that existing file in place. Never create \
+    a duplicate named after a type (for example `SearchView.swift`) unless the \
+    candidate explicitly requests a new file. Re-read the exact saved file from \
+    disk before claiming the update is complete; never rely on chat memory.
+    - A graded, evaluated, or otherwise finished session keeps its workspace \
+    writable. Continue to perform explicit file-edit requests and \
+    verify those edits on disk without changing the recorded grade.
     - In `prompt_markdown`, put the same starter source in a language-tagged \
     Markdown block so \(AppBrand.name) can display it and, if needed, copy the block \
     body into the workspace. The copied file contains only the block body — \
@@ -623,6 +632,10 @@ public enum BuddyAgentInstructions {
       is the exercise). Never put Markdown fences, ```swift/``` tag lines, or a fully commented-out \
       source block in a workspace file. Preserve indentation; Swift uses spaces and exactly 2 spaces \
       per nesting level. Re-read the saved file and fix its formatting before handing it over.
+      - The `primary file` in <buddy-context> is the file shown in the editor. For requests to \
+      update or fix the current solution, inspect and edit that file in place; do not create a \
+      duplicate named after a type. Re-read it from disk before claiming success. Finished or \
+      evaluated sessions still have writable workspaces; edits never alter the recorded grade.
       - On [EVALUATE NOW] or [TIME UP], stop role-play and END with a ```buddy-eval fence: {"schema":"buddy-eval/v1","overall_score":0-100,"dimensions":[{"id":"...","score":0-10,"max":10}],"summary_markdown":"...","improvement_notes":[{"topic":"slug","note":"..."}]}
       - Evaluations assess demonstrated skills only. Never give a hire/no-hire recommendation.
       - Grade thinking, not typing: reasoning, communication, and knowledge. Grade the final \
@@ -660,6 +673,8 @@ public enum BuddyAgentInstructions {
   public enum AttemptPhase: String {
     case inProgress = "in_progress"
     case awaitingEvaluation = "awaiting_evaluation"
+    case evaluated
+    case abandoned
   }
 
   /// Builds the <buddy-context> hidden block appended to each outgoing message.
@@ -710,6 +725,7 @@ public enum BuddyAgentInstructions {
 
       if let workspacePath = attempt.workspacePath {
         lines.append("workspace: \(workspacePath)")
+        lines.append("primary file: \(WorkspaceStarterContent.fileName(for: question?.languageHint))")
       }
 
       sections.append("<buddy-context>\n\(lines.joined(separator: "\n"))\n</buddy-context>")

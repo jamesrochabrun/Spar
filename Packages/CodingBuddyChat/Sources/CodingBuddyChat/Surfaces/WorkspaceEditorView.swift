@@ -16,6 +16,7 @@ import SwiftUI
 public struct WorkspaceEditorView: View {
   private let workspacePath: String?
   private let question: Question?
+  private let externalRefreshToken: Int
   private let codeRunner: any CodeRunning
   private let floatingAccessory: AnyView?
 
@@ -40,12 +41,14 @@ public struct WorkspaceEditorView: View {
   public init(
     workspacePath: String?,
     question: Question?,
+    externalRefreshToken: Int = 0,
     codeRunner: any CodeRunning = ProcessCodeRunner(),
     onReviewRequested: ((String) -> Void)? = nil,
     floatingAccessory: AnyView? = nil
   ) {
     self.workspacePath = workspacePath
     self.question = question
+    self.externalRefreshToken = externalRefreshToken
     self.codeRunner = codeRunner
     self.onReviewRequested = onReviewRequested
     self.floatingAccessory = floatingAccessory
@@ -76,6 +79,11 @@ public struct WorkspaceEditorView: View {
         .onChange(of: question?.id) { _, _ in
           // The question often lands after the session starts: seed the still
           // untouched solution file with the problem header when it arrives.
+          prepareWorkspace(workspacePath)
+        }
+        .onChange(of: externalRefreshToken) { _, _ in
+          // Provider tools write directly to disk. Refresh completed turns so
+          // new files appear and clean editor buffers adopt in-place edits.
           prepareWorkspace(workspacePath)
         }
       } else {

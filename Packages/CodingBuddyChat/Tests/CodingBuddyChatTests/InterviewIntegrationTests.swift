@@ -166,6 +166,21 @@ struct InterviewIntegrationTests {
     }
     let questions = try await storage.questions(mode: nil, topicId: nil, difficulty: nil)
     #expect(questions.filter { $0.title == "Unique Capture" }.count == 1)
+    #expect(service.workspaceRevision == 1)
+  }
+
+  @Test
+  func completedAssistantTurnSignalsWorkspaceRefresh() async throws {
+    let (service, _, root) = makeService()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    await service.startNewSession(ChatService.NewSessionRequest(mode: .practice))
+    let vm = try #require(service.chatViewModel)
+    #expect(service.workspaceRevision == 0)
+
+    vm.onAssistantTurnCompleted?(nil, assistantMessage("Updated the primary file."))
+
+    #expect(service.workspaceRevision == 1)
   }
 
   @Test
