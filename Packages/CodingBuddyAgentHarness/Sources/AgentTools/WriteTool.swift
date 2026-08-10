@@ -24,7 +24,7 @@ public struct WriteTool: AgentTool {
       ],
       "content": [
         "type": "string",
-        "description": "The full content the file should contain after writing.",
+        "description": "The literal, fully formatted file content. For source files, provide raw code with its original indentation; never include Markdown fence delimiters or language-tag lines.",
       ],
     ],
     "required": ["file_path", "content"],

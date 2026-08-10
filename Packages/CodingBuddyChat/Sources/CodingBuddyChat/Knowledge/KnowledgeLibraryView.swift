@@ -31,7 +31,7 @@ public struct KnowledgeLibraryView: View {
         onDelete: presentDeleteConfirmation
       )
       .navigationTitle("Learning Library")
-      .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
+      .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 300)
     } detail: {
       if let selectedStudySpace {
         StudySpaceLearningDetailView(
@@ -59,7 +59,12 @@ public struct KnowledgeLibraryView: View {
           .disabled(library.isImporting)
       }
     }
-    .frame(minWidth: 820, idealWidth: 980, minHeight: 540, idealHeight: 680)
+    .frame(
+      minWidth: 1120,
+      idealWidth: 1280,
+      minHeight: 600,
+      idealHeight: 760
+    )
     .background(EaselDesignSystem.Palette.canvas(for: colorScheme))
     .fileImporter(
       isPresented: $isRepositoryImporterPresented,

@@ -17,6 +17,10 @@ public struct AttemptRow: Identifiable {
 
   public var id: String { session.id }
 
+  /// The interview mode shown in the flat sidebar row. Legacy chats that do
+  /// not have an interview attempt remain available as Practice sessions.
+  public var mode: SessionMode { attempt?.mode ?? .practice }
+
   public init(
     session: StoredSession,
     attempt: InterviewAttempt? = nil,
@@ -34,6 +38,41 @@ public struct AttemptRow: Identifiable {
     if let questionTitle, !questionTitle.isEmpty { return questionTitle }
     if !session.firstUserMessage.isEmpty { return session.firstUserMessage }
     return "New Session"
+  }
+
+  /// Joins stored chat sessions with their interview metadata and returns one
+  /// globally recent list for the sidebar.
+  public static func rows(
+    attempts: [InterviewAttempt],
+    sessions: [StoredSession],
+    questionTitlesById: [String: String],
+    scoresByAttemptId: [String: Double]
+  ) -> [AttemptRow] {
+    let attemptsByChatSession: [String: InterviewAttempt] = attempts.reduce(into: [:]) { result, attempt in
+      guard let chatSessionId = attempt.chatSessionId else { return }
+      // Newest attempt wins when several link the same chat session.
+      if let existing = result[chatSessionId], existing.startedAt > attempt.startedAt { return }
+      result[chatSessionId] = attempt
+    }
+
+    return sessions
+      .map { session in
+        let attempt = attemptsByChatSession[session.id]
+        let questionTitle = attempt?.questionId.flatMap { questionTitlesById[$0] }
+        let score = attempt.flatMap { scoresByAttemptId[$0.id] }
+        return AttemptRow(
+          session: session,
+          attempt: attempt,
+          questionTitle: questionTitle,
+          overallScore: score
+        )
+      }
+      .sorted { lhs, rhs in
+        if lhs.session.lastAccessedAt != rhs.session.lastAccessedAt {
+          return lhs.session.lastAccessedAt > rhs.session.lastAccessedAt
+        }
+        return lhs.session.createdAt > rhs.session.createdAt
+      }
   }
 }
 
@@ -67,36 +106,17 @@ public struct ModeGroup: Identifiable {
     scoresByAttemptId: [String: Double],
     previousExpansion: [String: Bool] = [:]
   ) -> [ModeGroup] {
-    let attemptsByChatSession: [String: InterviewAttempt] = attempts.reduce(into: [:]) { result, attempt in
-      guard let chatSessionId = attempt.chatSessionId else { return }
-      // Newest attempt wins when several link the same chat session.
-      if let existing = result[chatSessionId], existing.startedAt > attempt.startedAt { return }
-      result[chatSessionId] = attempt
-    }
-
-    var rowsByMode: [SessionMode: [AttemptRow]] = [:]
-    for session in sessions {
-      let attempt = attemptsByChatSession[session.id]
-      let mode = attempt?.mode ?? .practice
-      let questionTitle = attempt?.questionId.flatMap { questionTitlesById[$0] }
-      let score = attempt.flatMap { scoresByAttemptId[$0.id] }
-      rowsByMode[mode, default: []].append(AttemptRow(
-        session: session,
-        attempt: attempt,
-        questionTitle: questionTitle,
-        overallScore: score
-      ))
-    }
+    let rowsByMode = Dictionary(grouping: AttemptRow.rows(
+      attempts: attempts,
+      sessions: sessions,
+      questionTitlesById: questionTitlesById,
+      scoresByAttemptId: scoresByAttemptId
+    ), by: \.mode)
 
     return displayOrder.map { mode in
-      let rows = (rowsByMode[mode] ?? []).sorted { lhs, rhs in
-        let lhsDate = lhs.attempt?.startedAt ?? lhs.session.lastAccessedAt
-        let rhsDate = rhs.attempt?.startedAt ?? rhs.session.lastAccessedAt
-        return lhsDate > rhsDate
-      }
       return ModeGroup(
         mode: mode,
-        rows: rows,
+        rows: rowsByMode[mode] ?? [],
         isExpanded: previousExpansion[mode.rawValue] ?? true
       )
     }

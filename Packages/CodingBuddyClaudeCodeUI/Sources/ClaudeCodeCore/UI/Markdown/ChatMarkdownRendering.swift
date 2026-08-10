@@ -27,6 +27,7 @@ enum BuddyFenceCollapser {
     ("buddy-question", "`📥 Question saved to bank`", "`📥 Saving question…`"),
     ("buddy-eval", "`📊 Evaluation recorded`", "`📊 Grading…`"),
     ("buddy-study-plan", "`📚 Study plan saved`", "`📚 Building study plan…`"),
+    ("buddy-lesson", "`🎓 Lesson shown in the Lesson tab`", "`🎓 Preparing lesson…`"),
   ]
 
   static func collapse(_ markdown: String) -> String {

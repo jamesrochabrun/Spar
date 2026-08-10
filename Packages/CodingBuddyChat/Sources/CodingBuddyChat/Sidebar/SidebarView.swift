@@ -40,15 +40,17 @@ public struct SidebarView: View {
         .fill(EaselDesignSystem.Palette.border(for: colorScheme))
         .frame(height: 1)
 
-      ScrollView {
-        LazyVStack(alignment: .leading, spacing: 10) {
-          ForEach(sidebarViewModel.modeGroups) { group in
-            modeGroupSection(group)
-          }
+      SidebarSessionList(
+        rows: sidebarViewModel.sessionRows,
+        selectedSessionID: sidebarViewModel.selectedSessionId,
+        onSelect: { row in
+          sidebarViewModel.selectSession(row.session)
+        },
+        onDelete: { row in
+          sessionToDelete = row.session
+          showDeleteSessionConfirmation = true
         }
-        .padding(12)
-        .animation(.easeInOut(duration: 0.22), value: groupAnimationValue)
-      }
+      )
     }
     .background(EaselDesignSystem.Palette.canvas(for: colorScheme))
     .tint(EaselDesignSystem.Palette.accent)
@@ -78,15 +80,14 @@ public struct SidebarView: View {
 
   private var headerView: some View {
     HStack(alignment: .center, spacing: 5) {
-      Image("easelmenubar")
-        .renderingMode(.template)
-        .resizable()
-        .scaledToFit()
+      Image(systemName: AppBrand.symbolName)
+        .font(.system(size: 15, weight: .medium))
+        .symbolRenderingMode(.hierarchical)
         .foregroundStyle(headerIconForegroundColor)
         .frame(width: 16, height: 16)
         .accessibilityHidden(true)
 
-      Text("CodingBuddy")
+      Text(AppBrand.name)
         .font(EaselDesignSystem.Typography.interface(size: 16, weight: .semibold))
         .foregroundStyle(.primary)
         .lineLimit(1)
@@ -138,129 +139,4 @@ public struct SidebarView: View {
     reservesWindowControls ? 78 : 16
   }
 
-  @ViewBuilder
-  private func modeGroupSection(_ group: ModeGroup) -> some View {
-    VStack(alignment: .leading, spacing: 6) {
-      HStack(alignment: .center, spacing: 2) {
-        Button {
-          sidebarViewModel.toggleGroup(group.mode)
-        } label: {
-          HStack(alignment: .center, spacing: 8) {
-            Image(systemName: group.systemImage)
-              .font(.system(size: 12, weight: .medium))
-              .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
-              .frame(width: 16)
-
-            VStack(alignment: .leading, spacing: 1) {
-              HStack(spacing: 8) {
-                Text(group.displayName)
-                  .font(EaselDesignSystem.Typography.interface(size: 13, weight: .semibold))
-                  .foregroundStyle(.primary)
-
-                if !group.rows.isEmpty {
-                  Text("\(group.rows.count)")
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
-                }
-              }
-
-              Text(group.mode.usageSubtitle)
-                .font(.system(size: 10))
-                .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
-                .lineLimit(1)
-                .truncationMode(.tail)
-            }
-
-            Spacer()
-          }
-          .padding(.leading, 8)
-          .padding(.vertical, 5)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .contentShape(Rectangle())
-        }
-        .frame(maxWidth: .infinity)
-        .buttonStyle(.plain)
-
-        Button {
-          sidebarViewModel.requestNewSession(mode: group.mode)
-        } label: {
-          Label("New \(group.displayName) Session", systemImage: "plus")
-            .labelStyle(.iconOnly)
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
-            .frame(width: 20, height: 20)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("New \(group.displayName) session")
-
-        Button {
-          sidebarViewModel.toggleGroup(group.mode)
-        } label: {
-          Label(
-            group.isExpanded ? "Collapse \(group.displayName)" : "Expand \(group.displayName)",
-            systemImage: "chevron.right"
-          )
-          .labelStyle(.iconOnly)
-          .font(.system(size: 10, weight: .semibold))
-          .foregroundStyle(EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
-          .rotationEffect(.degrees(group.isExpanded ? 90 : 0))
-          .frame(width: 20, height: 20)
-          .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(group.isExpanded ? "Collapse \(group.displayName)" : "Expand \(group.displayName)")
-        .padding(.trailing, 4)
-      }
-
-      if group.isExpanded {
-        if group.rows.isEmpty {
-          Button {
-            sidebarViewModel.requestNewSession(mode: group.mode)
-          } label: {
-            Label(startFirstSessionTitle(for: group.mode), systemImage: "plus.circle")
-              .font(.caption)
-              .foregroundStyle(.tint)
-              .contentShape(Rectangle())
-          }
-          .buttonStyle(.plain)
-          .padding(.horizontal, 12)
-          .padding(.bottom, 4)
-        } else {
-          ForEach(group.rows) { row in
-            SidebarSessionRow(
-              row: row,
-              isSelected: row.id == sidebarViewModel.selectedSessionId,
-              onSelect: {
-                sidebarViewModel.selectSession(row.session)
-              },
-              onDelete: {
-                sessionToDelete = row.session
-                showDeleteSessionConfirmation = true
-              }
-            )
-            .padding(.leading, 6)
-            .transition(.opacity.combined(with: .move(edge: .top)))
-          }
-        }
-      }
-    }
-  }
-
-  private func startFirstSessionTitle(for mode: SessionMode) -> String {
-    switch mode {
-    case .mockInterview: return "Start your first mock interview"
-    case .drill: return "Start your first drill"
-    case .practice: return "Start your first practice session"
-    case .systemDesign: return "Start your first system design session"
-    case .behavioral: return "Start your first behavioral session"
-    }
-  }
-
-  private var groupAnimationValue: [String] {
-    sidebarViewModel.modeGroups.map { group in
-      let rowIDs = group.rows.map(\.id).joined(separator: ",")
-      return "\(group.id):\(group.isExpanded):\(rowIDs)"
-    }
-  }
 }

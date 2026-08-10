@@ -25,6 +25,15 @@ final class BuiltInToolsTests: XCTestCase {
 
   // MARK: - Write / Read / Edit round trip
 
+  func testWriteDescriptionRequiresRawIndentedSource() {
+    let write = WriteTool(registry: registry)
+    let contentDescription = write.parametersJSONSchema["properties"]?["content"]?["description"]?.stringValue
+
+    XCTAssertTrue(contentDescription?.contains("raw code") == true)
+    XCTAssertTrue(contentDescription?.contains("indentation") == true)
+    XCTAssertTrue(contentDescription?.contains("Markdown fence") == true)
+  }
+
   func testWriteReadEditRoundTrip() async throws {
     let write = WriteTool(registry: registry)
     let read = ReadTool(registry: registry)

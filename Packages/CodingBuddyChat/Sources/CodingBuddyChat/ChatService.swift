@@ -355,7 +355,8 @@ public final class ChatService: ChatServiceProtocol {
         question: request.question,
         durationSeconds: request.durationSeconds,
         hintBudget: request.hintBudget,
-        provider: provider
+        provider: provider,
+        requestedDifficulty: request.difficulty ?? request.question?.difficulty ?? .medium
       )
     } catch {
       initError = error
@@ -928,7 +929,8 @@ public final class ChatService: ChatServiceProtocol {
     let results = StructuredBlockCapture.capture(
       messageText: message.content,
       mode: mode,
-      attemptId: attempt?.id
+      attemptId: attempt?.id,
+      nextRepIndex: interviewSession.drillRun.nextIndex
     )
 
     var capturedEvaluation = false
@@ -967,6 +969,8 @@ public final class ChatService: ChatServiceProtocol {
           capturedEvaluation = true
           await interviewSession.completeEvaluation(captured.evaluation, notes: captured.notes)
           await skillStats.refresh()
+        case .drillRep(let captured):
+          interviewSession.recordDrillRep(captured.rep)
         }
       }
 
@@ -1133,7 +1137,9 @@ public final class ChatService: ChatServiceProtocol {
       attempt: attempt,
       question: interviewSession.activeQuestion,
       timerRemaining: sessionTimer.remaining,
-      phase: phase
+      phase: phase,
+      drillRun: interviewSession.drillRun,
+      suggestedDifficulty: attempt.mode == .drill ? interviewSession.suggestedNextDifficulty : nil
     )
   }
 

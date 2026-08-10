@@ -23,8 +23,10 @@ let package = Package(
     .package(path: "../CodingBuddyAgentHarness"),
     .package(path: "../CodingBuddyAgentMLX"),
     .package(url: "https://github.com/appstefan/highlightswift", from: "1.1.0"),
-    .package(url: "https://github.com/CodeEditApp/CodeEditSourceEditor", exact: "0.15.2"),
-    .package(url: "https://github.com/CodeEditApp/CodeEditLanguages", exact: "0.1.20"),
+    .package(
+      url: "https://github.com/jamesrochabrun/PierreDiffsSwift",
+      exact: "1.2.4"
+    ),
   ],
   targets: [
     .target(
@@ -40,8 +42,7 @@ let package = Package(
         .product(name: "CodingBuddyAgentHarness", package: "CodingBuddyAgentHarness"),
         .product(name: "CodingBuddyAgentMLX", package: "CodingBuddyAgentMLX"),
         .product(name: "HighlightSwift", package: "highlightswift"),
-        .product(name: "CodeEditSourceEditor", package: "CodeEditSourceEditor"),
-        .product(name: "CodeEditLanguages", package: "CodeEditLanguages"),
+        .product(name: "PierreDiffsSwift", package: "PierreDiffsSwift"),
       ],
       swiftSettings: [
         .swiftLanguageMode(.v5)
@@ -58,8 +59,7 @@ let package = Package(
         .product(name: "BuddyMCPApps", package: "BuddyMCPUI"),
         .product(name: "ClaudeCodeCore", package: "CodingBuddyClaudeCodeUI"),
         .product(name: "HighlightSwift", package: "highlightswift"),
-        .product(name: "CodeEditSourceEditor", package: "CodeEditSourceEditor"),
-        .product(name: "CodeEditLanguages", package: "CodeEditLanguages"),
+        .product(name: "PierreDiffsSwift", package: "PierreDiffsSwift"),
       ],
       swiftSettings: [
         .swiftLanguageMode(.v5)

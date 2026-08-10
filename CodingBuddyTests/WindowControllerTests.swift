@@ -30,6 +30,7 @@ struct WindowControllerTests {
     #expect(controller.canvasWindow.styleMask.contains(.resizable))
     #expect(controller.canvasWindow.styleMask.contains(.fullSizeContentView))
     #expect(!controller.canvasWindow.styleMask.contains(.nonactivatingPanel))
+    #expect(controller.canvasWindow.title == AppBrand.name)
     #expect(controller.canvasWindow.titleVisibility == .hidden)
     #expect(controller.canvasWindow.titlebarAppearsTransparent)
     #expect(controller.canvasWindow.isMovableByWindowBackground)

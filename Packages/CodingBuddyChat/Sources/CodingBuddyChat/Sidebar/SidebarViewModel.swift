@@ -12,15 +12,13 @@ public final class SidebarViewModel {
 
   // MARK: - Public State
 
-  public private(set) var modeGroups: [ModeGroup] = []
+  public private(set) var sessionRows: [AttemptRow] = []
   public var selectedSessionId: String?
   public var isSidebarVisible: Bool = true
   public var isNewSessionSheetPresented = false
-  /// Mode the new-session sheet opens preselected to, set by the entry point
-  /// (global "+", a section's "+", or an empty-state button).
+  /// Mode the new-session sheet opens preselected to from the global "+".
   public private(set) var newSessionInitialMode: SessionMode = .mockInterview
-  /// A mode-specific sidebar entry point locks the sheet to that mode. The
-  /// global "+" leaves the mode picker available.
+  /// The global "+" leaves the mode picker available.
   public private(set) var isNewSessionModeSelectionLocked = false
 
   // MARK: - Callbacks
@@ -69,17 +67,15 @@ public final class SidebarViewModel {
         }
       }
 
-      let previousExpansion = Dictionary(uniqueKeysWithValues: modeGroups.map { ($0.id, $0.isExpanded) })
       let sessionsForDisplay = sessionsIncludingPendingNewSession(sessions)
-      modeGroups = ModeGroup.groups(
+      sessionRows = AttemptRow.rows(
         attempts: attemptsIncludingPendingPlaceholder(attempts),
         sessions: sessionsForDisplay,
         questionTitlesById: questionTitlesById,
-        scoresByAttemptId: scoresByAttemptId,
-        previousExpansion: previousExpansion
+        scoresByAttemptId: scoresByAttemptId
       )
     } catch {
-      modeGroups = []
+      sessionRows = []
     }
   }
 
@@ -140,12 +136,6 @@ public final class SidebarViewModel {
     isNewSessionSheetPresented = true
   }
 
-  public func requestNewSession(mode: SessionMode) {
-    newSessionInitialMode = mode
-    isNewSessionModeSelectionLocked = true
-    isNewSessionSheetPresented = true
-  }
-
   public func requestDashboard() {
     onDashboardToggle?()
   }
@@ -158,11 +148,6 @@ public final class SidebarViewModel {
       workingDirectory: nil
     )
     onStartSession?(request)
-  }
-
-  func toggleGroup(_ mode: SessionMode) {
-    guard let index = modeGroups.firstIndex(where: { $0.mode == mode }) else { return }
-    modeGroups[index].isExpanded.toggle()
   }
 
   func selectSession(_ session: StoredSession) {
@@ -193,17 +178,17 @@ public final class SidebarViewModel {
     selectedSessionId = session.id
 
     if let previousPendingSessionID, previousPendingSessionID != session.id {
-      removeRowFromLoadedGroups(id: previousPendingSessionID)
+      removeRowFromLoadedSessions(id: previousPendingSessionID)
     }
 
-    applyPendingNewSessionToLoadedGroups()
+    applyPendingNewSessionToLoadedSessions()
   }
 
   private func clearPendingNewSession() {
     guard let pendingNewSession else { return }
 
     self.pendingNewSession = nil
-    removeRowFromLoadedGroups(id: pendingNewSession.id)
+    removeRowFromLoadedSessions(id: pendingNewSession.id)
 
     if selectedSessionId == pendingNewSession.id {
       selectedSessionId = nil
@@ -232,37 +217,35 @@ public final class SidebarViewModel {
     return [pendingNewSession] + sessions
   }
 
-  /// Synthetic attempt so the pending session row lands in its mode's group
-  /// rather than defaulting to Practice.
+  /// A synthetic attempt carries the pending row's selected mode until its
+  /// persisted interview attempt becomes available.
   private func attemptsIncludingPendingPlaceholder(_ attempts: [InterviewAttempt]) -> [InterviewAttempt] {
-    guard let pendingNewSession, pendingNewSessionMode != .practice else { return attempts }
-
-    let placeholder = InterviewAttempt(
-      chatSessionId: pendingNewSession.id,
-      provider: pendingNewSession.provider.rawValue,
-      mode: pendingNewSessionMode,
-      startedAt: pendingNewSession.createdAt
-    )
-    return attempts + [placeholder]
+    guard let pendingNewSession else { return attempts }
+    return attempts + [pendingAttempt(for: pendingNewSession)]
   }
 
-  private func applyPendingNewSessionToLoadedGroups() {
+  private func applyPendingNewSessionToLoadedSessions() {
     guard let pendingNewSession else { return }
 
-    let row = AttemptRow(session: pendingNewSession)
-    for index in modeGroups.indices {
-      modeGroups[index].rows.removeAll { $0.id == pendingNewSession.id }
-      if modeGroups[index].mode == pendingNewSessionMode {
-        modeGroups[index].rows.insert(row, at: 0)
-        modeGroups[index].isExpanded = true
-      }
-    }
+    let row = AttemptRow(
+      session: pendingNewSession,
+      attempt: pendingAttempt(for: pendingNewSession)
+    )
+    sessionRows.removeAll { $0.id == pendingNewSession.id }
+    sessionRows.insert(row, at: 0)
   }
 
-  private func removeRowFromLoadedGroups(id sessionID: String) {
-    for index in modeGroups.indices {
-      modeGroups[index].rows.removeAll { $0.id == sessionID }
-    }
+  private func removeRowFromLoadedSessions(id sessionID: String) {
+    sessionRows.removeAll { $0.id == sessionID }
+  }
+
+  private func pendingAttempt(for session: StoredSession) -> InterviewAttempt {
+    InterviewAttempt(
+      chatSessionId: session.id,
+      provider: session.provider.rawValue,
+      mode: pendingNewSessionMode,
+      startedAt: session.createdAt
+    )
   }
 
   private func isPendingNewSession(_ session: StoredSession) -> Bool {

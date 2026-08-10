@@ -8,17 +8,15 @@ import InterviewKit
 import SwiftUI
 
 /// Countdown pill for the persistent right-panel top bar: amber at 20%
-/// remaining, red at 5%; pause for practice mode only; "End & grade".
+/// remaining, red at 5%; pause on any timed session; "End & grade".
 public struct TimerPillView: View {
   private let timer: SessionTimer
-  private let mode: SessionMode
   private let onEndAndGrade: () -> Void
 
   @Environment(\.colorScheme) private var colorScheme
 
-  public init(timer: SessionTimer, mode: SessionMode, onEndAndGrade: @escaping () -> Void) {
+  public init(timer: SessionTimer, onEndAndGrade: @escaping () -> Void) {
     self.timer = timer
-    self.mode = mode
     self.onEndAndGrade = onEndAndGrade
   }
 
@@ -42,22 +40,23 @@ public struct TimerPillView: View {
         }
         .help(timer.isPaused ? "Timer paused" : "Time remaining")
 
-        if mode == .practice {
-          Button {
-            if timer.isPaused {
-              timer.resume()
-            } else {
-              timer.pause()
-            }
-          } label: {
-            Image(systemName: timer.isPaused ? "play.fill" : "pause.fill")
-              .font(.system(size: 10, weight: .semibold))
-              .frame(width: 22, height: 22)
+        // Pause used to be gated to practice — the one mode that never has a
+        // timer, so the control could never appear. It belongs wherever a
+        // countdown is actually running.
+        Button(timer.isPaused ? "Resume timer" : "Pause timer",
+               systemImage: timer.isPaused ? "play.fill" : "pause.fill") {
+          if timer.isPaused {
+            timer.resume()
+          } else {
+            timer.pause()
           }
-          .buttonStyle(.plain)
-          .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
-          .help(timer.isPaused ? "Resume timer" : "Pause timer")
         }
+        .buttonStyle(.plain)
+        .labelStyle(.iconOnly)
+        .font(.system(size: 10, weight: .semibold))
+        .frame(width: 22, height: 22)
+        .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+        .help(timer.isPaused ? "Resume timer" : "Pause timer")
       }
 
       Button("End & Grade", systemImage: "checkmark.seal", action: onEndAndGrade)

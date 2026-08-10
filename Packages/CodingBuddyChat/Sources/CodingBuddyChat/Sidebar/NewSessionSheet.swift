@@ -328,14 +328,20 @@ public struct NewSessionSheet: View {
   private var modePicker: some View {
     VStack(alignment: .leading, spacing: 8) {
       sectionTitle(selectedStudySpaceID == nil ? "Mode" : "Interview format")
-      Picker("Mode", selection: $mode) {
-        ForEach(availableModes) { mode in
-          Label(mode.displayName, systemImage: mode.systemImage).tag(mode)
+
+      VStack(spacing: 6) {
+        ForEach(availableModes) { candidate in
+          SessionModeCard(
+            mode: candidate,
+            isSelected: mode == candidate,
+            action: { mode = candidate }
+          )
         }
       }
-      .pickerStyle(.segmented)
-      .labelsHidden()
       .disabled(isModeSelectionLocked)
+      .opacity(isModeSelectionLocked ? 0.6 : 1)
+      .accessibilityElement(children: .contain)
+      .accessibilityLabel("Session mode")
     }
   }
 

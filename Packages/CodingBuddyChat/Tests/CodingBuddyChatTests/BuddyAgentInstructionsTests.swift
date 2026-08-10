@@ -25,10 +25,17 @@ struct BuddyAgentInstructionsTests {
       #expect(prefixes.api.contains("buddy-question"))
       #expect(prefixes.api.contains("buddy-eval"))
       #expect(prefixes.api.contains("buddy-study-plan"))
-      #expect(!prefixes.claude.contains("\"verdict\""))
-      #expect(!prefixes.api.contains("\"verdict\""))
       // Compact prompts stay small for local models.
       #expect(prefixes.api.count < prefixes.claude.count)
+    }
+
+    // The retired buddy-eval "verdict" field must not creep back in. Drills
+    // legitimately use the word for a per-rep buddy-rep verdict, so the ban
+    // belongs to the evaluation contract rather than the whole prompt.
+    #expect(!BuddyAgentInstructions.evalContract.contains("\"verdict\""))
+    for mode in SessionMode.allCases where mode != .drill {
+      #expect(!BuddyAgentInstructions.prefixes(for: mode).claude.contains("\"verdict\""))
+      #expect(!BuddyAgentInstructions.prefixes(for: mode).api.contains("\"verdict\""))
     }
   }
 
@@ -38,6 +45,118 @@ struct BuddyAgentInstructionsTests {
     #expect(prefixes.claude.contains("[HINT REQUEST]"))
     #expect(prefixes.claude.contains("never confirm correctness") || prefixes.claude.contains("never confirm"))
     #expect(prefixes.claude.contains("speed"))
+  }
+
+  @Test
+  func questionPromptsRequireSelfContainedTypesForEveryProvider() {
+    for mode in SessionMode.allCases {
+      let prefixes = BuddyAgentInstructions.prefixes(for: mode)
+      for prompt in [prefixes.claude, prefixes.codex, prefixes.api] {
+        #expect(prompt.contains("prompt_markdown"))
+        #expect(prompt.contains("self-contained"))
+        #expect(prompt.contains("custom type"))
+        #expect(prompt.contains("missing") && prompt.contains("scaffolding"))
+      }
+    }
+  }
+
+  @Test
+  func everyProviderRequiresCleanCompilableWorkspaceSource() {
+    for mode in SessionMode.allCases {
+      let prefixes = BuddyAgentInstructions.prefixes(for: mode)
+      for prompt in [prefixes.claude, prefixes.codex, prefixes.api] {
+        #expect(prompt.contains("starter file"))
+        #expect(prompt.contains("compiles before"))
+        #expect(prompt.contains("Markdown fences"))
+        #expect(prompt.contains("commented-out") || prompt.contains("comment out"))
+        #expect(prompt.contains("indentation"))
+        #expect(prompt.contains("2 spaces"))
+      }
+    }
+  }
+
+  @Test
+  func evaluationPromptsGradeReasoningAndIgnoreSyntaxEntirely() {
+    for mode in SessionMode.allCases {
+      let prefixes = BuddyAgentInstructions.prefixes(for: mode)
+      for prompt in [prefixes.claude, prefixes.codex, prefixes.api] {
+        #expect(prompt.contains("editing process"))
+        #expect(prompt.contains("thinking, not typing") || prompt.contains("Grade thinking, not typing"))
+        #expect(prompt.contains("Ignore syntax entirely") || prompt.contains("Never score syntax"))
+        #expect(prompt.contains("missing imports"))
+        #expect(prompt.contains("boilerplate"))
+      }
+
+      let directive = BuddyAgentInstructions.evaluationDirective(mode: mode)
+      #expect(directive.contains("editing process"))
+      #expect(directive.contains("Syntax is out of scope"))
+      #expect(directive.contains("Never score syntax"))
+      #expect(directive.contains("scaffolding that you supplied"))
+      // The old policy — "consider syntax if the final code would not compile"
+      // — is exactly the nitpicking this rubric is meant to stop.
+      #expect(!directive.contains("would not compile"))
+    }
+  }
+
+  @Test
+  func everyProviderPromptPutsBoilerplateAndSyntaxOnBuddy() {
+    for mode in SessionMode.allCases {
+      let prefixes = BuddyAgentInstructions.prefixes(for: mode)
+      for prompt in [prefixes.claude, prefixes.codex, prefixes.api] {
+        // Buddy writes the mechanical code, including test scaffolding.
+        #expect(prompt.contains("XCTestCase") || prompt.contains("`XCTestCase`"))
+        #expect(prompt.contains("@Suite"))
+        #expect(prompt.contains("Xcode template") || prompt.contains("Xcode file template"))
+        // Syntax help is free — it never spends the hint budget.
+        #expect(prompt.contains("never counts as a hint") ||
+                prompt.contains("NEVER consumes the hint budget"))
+        // Only the assessed part stays withheld.
+        #expect(prompt.contains("the approach"))
+      }
+    }
+  }
+
+  @Test
+  func everyProviderImplementsAnExplicitlyRequestedFullSolution() {
+    for mode in SessionMode.allCases {
+      let prefixes = BuddyAgentInstructions.prefixes(for: mode)
+      for prompt in [prefixes.claude, prefixes.codex, prefixes.api] {
+        #expect(prompt.contains("implement the full solution"))
+        #expect(prompt.contains("inspect the workspace"))
+        #expect(prompt.contains("add or update relevant tests"))
+        #expect(prompt.contains("verify"))
+        #expect(prompt.contains("Do not infer"))
+      }
+    }
+  }
+
+  @Test
+  func rubricsWeighReasoningInsteadOfCodeQuality() {
+    let reasoningModes: [SessionMode] = [.mockInterview, .practice, .drill]
+    for mode in reasoningModes {
+      let directive = BuddyAgentInstructions.evaluationDirective(mode: mode)
+      let prefixes = BuddyAgentInstructions.prefixes(for: mode)
+      for text in [directive, prefixes.claude, prefixes.api] {
+        #expect(text.contains("reasoning"))
+        #expect(!text.contains("code_quality"))
+      }
+    }
+    // Non-coding rubrics keep their own dimensions.
+    #expect(BuddyAgentInstructions.evaluationDirective(mode: .systemDesign)
+      .contains("scalability_tradeoffs"))
+    #expect(BuddyAgentInstructions.evaluationDirective(mode: .behavioral)
+      .contains("star_structure"))
+  }
+
+  @Test
+  func questionContractShipsTestScaffoldingInsteadOfDemandingIt() {
+    for mode in SessionMode.allCases {
+      let prefixes = BuddyAgentInstructions.prefixes(for: mode)
+      for prompt in [prefixes.claude, prefixes.api] {
+        #expect(prompt.contains("test file"))
+        #expect(prompt.contains("example test") || prompt.contains("worked example test"))
+      }
+    }
   }
 
   @Test
@@ -213,6 +332,96 @@ struct BuddyAgentInstructionsTests {
     #expect(context.contains("timer: 21:34 remaining of 35:00"))
     #expect(context.contains("hints: 1 used of 3"))
     #expect(context.contains("workspace: /Users/x/Documents/CodingBuddy/Workspaces/2026-07-31-longest-substring"))
+  }
+
+  @Test
+  func drillHiddenContextCarriesTheRunAndTheDifficultyLadder() {
+    let attempt = InterviewAttempt(
+      provider: "claude",
+      mode: .drill,
+      plannedDurationSeconds: 1200,
+      hintBudget: 3
+    )
+
+    var run = DrillRun()
+    run.append(DrillRep(index: 1, topicIds: ["hash-maps"], difficulty: .easy, verdict: .incorrect))
+    run.append(DrillRep(index: 2, topicIds: ["two-pointers"], difficulty: .easy, verdict: .correct))
+    run.append(DrillRep(index: 3, topicIds: ["arrays"], difficulty: .medium, verdict: .correct))
+
+    let context = BuddyAgentInstructions.appendingHiddenContext(
+      nil,
+      attempt: attempt,
+      question: nil,
+      timerRemaining: 600,
+      phase: .inProgress,
+      drillRun: run,
+      suggestedDifficulty: .hard
+    )
+
+    #expect(context.contains("drill run: rep 4 | 2 clean, 0 partial, 1 missed of 3 | streak 2"))
+    #expect(context.contains("recent reps: 1 incorrect (easy; hash-maps)"))
+    #expect(context.contains("3 correct (medium; arrays)"))
+    #expect(context.contains("revisit topics: hash-maps"))
+    #expect(context.contains("next difficulty: hard"))
+  }
+
+  @Test
+  func drillHiddenContextAnnouncesAnUngradedRun() {
+    let attempt = InterviewAttempt(provider: "claude", mode: .drill, hintBudget: 3)
+    let context = BuddyAgentInstructions.appendingHiddenContext(
+      nil,
+      attempt: attempt,
+      question: nil,
+      timerRemaining: nil,
+      phase: .inProgress,
+      suggestedDifficulty: .medium
+    )
+    #expect(context.contains("drill run: rep 1 — no reps graded yet"))
+    #expect(context.contains("next difficulty: medium"))
+    #expect(!context.contains("recent reps:"))
+  }
+
+  @Test
+  func nonDrillModesNeverCarryRunLines() {
+    var run = DrillRun()
+    run.append(DrillRep(index: 1, verdict: .correct))
+
+    for mode in SessionMode.allCases where mode != .drill {
+      let attempt = InterviewAttempt(provider: "claude", mode: mode, hintBudget: 3)
+      let context = BuddyAgentInstructions.appendingHiddenContext(
+        nil,
+        attempt: attempt,
+        question: nil,
+        timerRemaining: nil,
+        phase: .inProgress,
+        drillRun: run,
+        suggestedDifficulty: .hard
+      )
+      #expect(!context.contains("drill run:"))
+      #expect(!context.contains("next difficulty:"))
+    }
+  }
+
+  @Test
+  func drillPromptsCarryTheRepContractAndDeferTheLadderToTheApp() {
+    let drill = BuddyAgentInstructions.prefixes(for: .drill)
+    for prompt in [drill.claude, drill.codex, drill.api] {
+      #expect(prompt.contains("buddy-rep"))
+      #expect(prompt.contains("\"verdict\":\"correct|partial|incorrect\""))
+      #expect(prompt.contains("next difficulty"))
+      // The verdict follows the same reasoning-over-syntax rule as grading.
+      #expect(prompt.contains("typo"))
+    }
+    // The old prompt claimed to read "recent scores from hidden context" that
+    // the app never sent; the run lines replace it.
+    #expect(!drill.claude.contains("recent scores"))
+
+    // The rep contract is drill-only — no other mode can satisfy it.
+    for mode in SessionMode.allCases where mode != .drill {
+      let prefixes = BuddyAgentInstructions.prefixes(for: mode)
+      #expect(!prefixes.claude.contains("buddy-rep"))
+      #expect(!prefixes.api.contains("buddy-rep"))
+    }
   }
 
   @Test

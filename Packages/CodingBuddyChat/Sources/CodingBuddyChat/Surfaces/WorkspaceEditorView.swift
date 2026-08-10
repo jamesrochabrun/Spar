@@ -22,6 +22,7 @@ public struct WorkspaceEditorView: View {
   @State private var files: [WorkspaceFile] = []
   @State private var selectedFile: WorkspaceFile?
   @State private var fileContent: String = ""
+  @State private var hasUnsavedEditorChanges = false
   @State private var isSaving = false
   @State private var loadError: String?
   @State private var isRunning = false
@@ -169,6 +170,7 @@ public struct WorkspaceEditorView: View {
             save(newText, to: selectedFile)
           },
           isRunning: isRunning,
+          onUnsavedChangesChange: { hasUnsavedEditorChanges = $0 },
           onRun: canRun(selectedFile) ? { latestText in
             saveAndRun(latestText, file: selectedFile)
           } : nil,
@@ -256,8 +258,8 @@ public struct WorkspaceEditorView: View {
 
   // MARK: - Workspace preparation
 
-  /// Ensures a solution file exists (seeded with the problem statement as a
-  /// comment header when the question is known), then opens it.
+  /// Ensures a solution file exists, seeded with raw starter source when the
+  /// question provides it, then opens it.
   private func prepareWorkspace(_ workspacePath: String) {
     refreshFiles(workspacePath)
 
@@ -266,7 +268,7 @@ public struct WorkspaceEditorView: View {
     var didSeed = false
 
     if files.isEmpty {
-      let seed = question.map(seededContent(for:)) ?? ""
+      let seed = question.map(WorkspaceStarterContent.make(for:)) ?? ""
       try? seed.write(to: starterURL, atomically: true, encoding: .utf8)
       refreshFiles(workspacePath)
       didSeed = true
@@ -274,22 +276,39 @@ public struct WorkspaceEditorView: View {
               let starter = files.first(where: { $0.url == starterURL }),
               let existing = try? String(contentsOf: starter.url, encoding: .utf8),
               existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              fileContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+              fileContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !hasUnsavedEditorChanges {
       // Question arrived after the file was created and it's still untouched
       // on disk AND in the visible buffer: seed it now. Never overwrite
       // anything the candidate typed.
-      try? seededContent(for: question).write(to: starter.url, atomically: true, encoding: .utf8)
+      try? WorkspaceStarterContent.make(for: question).write(
+        to: starter.url,
+        atomically: true,
+        encoding: .utf8
+      )
       didSeed = true
     }
 
-    // Prefer the solution file; fall back to the first file. Only reload an
-    // existing selection when we just seeded it — never over unsaved edits.
+    // Prefer the solution file; fall back to the first file. If Buddy wrote to
+    // the already-open file, adopt that disk content only while the candidate
+    // has no unsaved edits in the visible editor.
     let preferred = files.first { $0.url == starterURL } ?? files.first
     if let preferred, selectedFile == nil || !files.contains(where: { $0 == selectedFile }) {
       select(preferred)
-    } else if didSeed, let selectedFile, selectedFile.url == starterURL {
-      select(selectedFile)
+    } else if let selectedFile,
+              let refreshedSelection = files.first(where: { $0.id == selectedFile.id }) {
+      reloadFromDiskIfNeeded(refreshedSelection, force: didSeed && selectedFile.url == starterURL)
     }
+  }
+
+  private func reloadFromDiskIfNeeded(_ file: WorkspaceFile, force: Bool) {
+    guard let diskContent = try? String(contentsOf: file.url, encoding: .utf8) else { return }
+    guard force || WorkspaceFileContentSync.shouldReload(
+      diskContent: diskContent,
+      displayedContent: fileContent,
+      hasUnsavedChanges: hasUnsavedEditorChanges
+    ) else { return }
+    select(file)
   }
 
   private func refreshFiles(_ workspacePath: String) {
@@ -317,11 +336,13 @@ public struct WorkspaceEditorView: View {
     do {
       fileContent = try String(contentsOf: file.url, encoding: .utf8)
       selectedFile = file
+      hasUnsavedEditorChanges = false
       loadError = nil
     } catch {
       loadError = "Could not read \(file.fileName)"
       selectedFile = nil
       fileContent = ""
+      hasUnsavedEditorChanges = false
     }
   }
 
@@ -331,6 +352,7 @@ public struct WorkspaceEditorView: View {
     do {
       try text.write(to: file.url, atomically: true, encoding: .utf8)
       fileContent = text
+      hasUnsavedEditorChanges = false
       loadError = nil
     } catch {
       loadError = "Could not save \(file.fileName)"
@@ -339,74 +361,7 @@ public struct WorkspaceEditorView: View {
 
   // MARK: - Starter file seeding
 
-  private var languageProfile: (fileName: String, comment: String) {
-    switch question?.languageHint?.lowercased() {
-    case "python": return ("solution.py", "#")
-    case "ruby": return ("solution.rb", "#")
-    case "typescript": return ("solution.ts", "//")
-    case "javascript": return ("solution.js", "//")
-    case "kotlin": return ("Solution.kt", "//")
-    case "java": return ("Solution.java", "//")
-    case "c++", "cpp": return ("solution.cpp", "//")
-    case "c": return ("solution.c", "//")
-    case "go": return ("solution.go", "//")
-    case "rust": return ("solution.rs", "//")
-    default: return ("solution.swift", "//")
-    }
-  }
-
-  private var starterFileName: String { languageProfile.fileName }
-
-  /// The problem statement as a comment header, so reading and solving happen
-  /// in the same buffer.
-  private func seededContent(for question: Question) -> String {
-    let comment = languageProfile.comment
-    var lines: [String] = []
-
-    var heading = "\(question.title) — \(question.difficulty.displayName)"
-    if !question.topicIds.isEmpty {
-      heading += " (\(question.topicIds.joined(separator: ", ")))"
-    }
-    lines.append("\(comment) \(heading)")
-    lines.append(comment)
-
-    for paragraph in question.promptMarkdown.components(separatedBy: "\n") {
-      for wrapped in wrap(paragraph, width: 88) {
-        lines.append(wrapped.isEmpty ? comment : "\(comment) \(wrapped)")
-      }
-    }
-
-    lines.append(comment)
-    let runnable = CodeRunLanguage.detect(
-      fileExtension: URL(fileURLWithPath: starterFileName).pathExtension
-    ) != nil
-    let runHint = runnable ? " ⌘R compiles and runs it." : ""
-    lines.append("\(comment) Write your solution below. ⌘S saves — graded on End & Grade.\(runHint)")
-    lines.append("")
-    lines.append("")
-
-    return lines.joined(separator: "\n")
-  }
-
-  private func wrap(_ text: String, width: Int) -> [String] {
-    let trimmed = text.trimmingCharacters(in: .whitespaces)
-    guard !trimmed.isEmpty else { return [""] }
-
-    var lines: [String] = []
-    var current = ""
-    for word in trimmed.split(separator: " ") {
-      if current.isEmpty {
-        current = String(word)
-      } else if current.count + word.count + 1 <= width {
-        current += " \(word)"
-      } else {
-        lines.append(current)
-        current = String(word)
-      }
-    }
-    if !current.isEmpty {
-      lines.append(current)
-    }
-    return lines
+  private var starterFileName: String {
+    WorkspaceStarterContent.fileName(for: question?.languageHint)
   }
 }

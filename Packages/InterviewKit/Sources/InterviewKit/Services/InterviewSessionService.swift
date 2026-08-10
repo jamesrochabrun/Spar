@@ -16,6 +16,14 @@ public final class InterviewSessionService {
   public private(set) var latestEvaluation: RubricEvaluation?
   public private(set) var latestNotes: [ImprovementNote] = []
 
+  /// Per-rep progress for the active drill. Lives for the session: the run is
+  /// a live coaching signal, and the attempt's evaluation is what persists.
+  public private(set) var drillRun = DrillRun()
+
+  /// Difficulty the candidate asked for when starting the run — the floor the
+  /// ladder walks up and down from before any rep has been graded.
+  private var requestedDifficulty: Difficulty = .medium
+
   /// Fires when an evaluation is persisted so the UI can switch to the report.
   public var onEvaluationCompleted: ((RubricEvaluation) -> Void)?
 
@@ -38,7 +46,8 @@ public final class InterviewSessionService {
     question: Question? = nil,
     durationSeconds: Int? = nil,
     hintBudget: Int = 3,
-    provider: String
+    provider: String,
+    requestedDifficulty: Difficulty = .medium
   ) async throws -> InterviewAttempt {
     await leaveActiveAttempt()
 
@@ -61,7 +70,21 @@ public final class InterviewSessionService {
     activeQuestion = question
     latestEvaluation = nil
     latestNotes = []
+    drillRun = DrillRun()
+    self.requestedDifficulty = requestedDifficulty
     return attempt
+  }
+
+  /// Records the verdict for the rep the agent just finished (buddy-rep fence).
+  /// Drills only — other modes have a single graded attempt.
+  public func recordDrillRep(_ rep: DrillRep) {
+    guard activeAttempt?.mode == .drill else { return }
+    drillRun.append(rep)
+  }
+
+  /// Difficulty the next rep should use, from the app's own ladder.
+  public var suggestedNextDifficulty: Difficulty {
+    drillRun.suggestedNextDifficulty(startingFrom: requestedDifficulty)
   }
 
   public func linkChatSession(_ chatSessionId: String) async {
@@ -156,6 +179,7 @@ public final class InterviewSessionService {
     activeQuestion = nil
     latestEvaluation = nil
     latestNotes = []
+    drillRun = DrillRun()
   }
 
   /// Deletes the attempt linked to a chat session, including its managed

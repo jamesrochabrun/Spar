@@ -14,6 +14,7 @@ public struct SessionReportView: View {
   private let notes: [ImprovementNote]
   private let attempt: InterviewAttempt?
   private let isGenerating: Bool
+  private let drillRun: DrillRun
 
   @Environment(\.colorScheme) private var colorScheme
 
@@ -21,12 +22,14 @@ public struct SessionReportView: View {
     evaluation: RubricEvaluation?,
     notes: [ImprovementNote],
     attempt: InterviewAttempt?,
-    isGenerating: Bool = false
+    isGenerating: Bool = false,
+    drillRun: DrillRun = DrillRun()
   ) {
     self.evaluation = evaluation
     self.notes = notes
     self.attempt = attempt
     self.isGenerating = isGenerating
+    self.drillRun = drillRun
   }
 
   public var body: some View {
@@ -58,6 +61,9 @@ public struct SessionReportView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 22) {
         scoreHeader(evaluation)
+        if !drillRun.isEmpty {
+          runBreakdown
+        }
         dimensionBars(evaluation)
         summarySection(evaluation)
         if !notes.isEmpty {
@@ -142,6 +148,59 @@ public struct SessionReportView: View {
           }
         }
       }
+    }
+  }
+
+  /// A drill's score hides what actually happened across the run: which reps
+  /// landed, at what difficulty, and which topics kept coming back.
+  private var runBreakdown: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      sectionTitle("Run — \(drillRun.cleanCount) of \(drillRun.repCount) clean")
+
+      VStack(alignment: .leading, spacing: 6) {
+        ForEach(drillRun.reps) { rep in
+          HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: rep.verdict.systemImage)
+              .font(.system(size: 8, weight: .bold))
+              .foregroundStyle(.white)
+              .frame(width: 15, height: 15)
+              .background(verdictColor(rep.verdict), in: Circle())
+              .accessibilityLabel(rep.verdict.displayName)
+
+            VStack(alignment: .leading, spacing: 1) {
+              Text(rep.questionTitle ?? "Rep \(rep.index)")
+                .font(.system(size: 12, weight: .medium))
+
+              if let note = rep.note {
+                Text(note)
+                  .font(.caption)
+                  .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+                  .fixedSize(horizontal: false, vertical: true)
+              }
+            }
+
+            Spacer(minLength: 8)
+
+            Text(rep.difficulty.displayName)
+              .font(.system(size: 10, weight: .semibold))
+              .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+          }
+        }
+      }
+
+      if !drillRun.shakyTopicIds.isEmpty {
+        Text("Kept slipping: \(drillRun.shakyTopicIds.prefix(4).joined(separator: ", "))")
+          .font(.caption)
+          .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+      }
+    }
+  }
+
+  private func verdictColor(_ verdict: DrillVerdict) -> Color {
+    switch verdict {
+    case .correct: return .green
+    case .partial: return .orange
+    case .incorrect: return .red
     }
   }
 

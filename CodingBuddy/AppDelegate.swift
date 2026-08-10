@@ -67,16 +67,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func configureStatusItem() {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     if let button = item.button {
-      let image = NSImage(named: "easelmenubar")
-      image?.size = NSSize(width: 18, height: 18)
-      image?.isTemplate = true
-      image?.accessibilityDescription = "CodingBuddy"
-      button.image = image
+      button.image = Self.makeStatusItemImage()
       button.target = self
       button.action = #selector(statusItemClicked(_:))
       button.sendAction(on: [.leftMouseUp, .rightMouseUp])
     }
     self.statusItem = item
+  }
+
+  static func makeStatusItemImage() -> NSImage? {
+    let image = NSImage(
+      systemSymbolName: AppBrand.symbolName,
+      accessibilityDescription: AppBrand.name
+    )?.withSymbolConfiguration(
+      NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
+    )
+    image?.isTemplate = true
+    return image
   }
 
   @objc private func statusItemClicked(_ sender: Any?) {
@@ -131,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     menu.addItem(NSMenuItem.separator())
 
     let quitItem = NSMenuItem(
-      title: "Quit CodingBuddy",
+      title: "Quit \(AppBrand.name)",
       action: #selector(quitApp(_:)),
       keyEquivalent: "q"
     )

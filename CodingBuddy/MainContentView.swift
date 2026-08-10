@@ -320,6 +320,13 @@ struct MainContentView: View {
     )
   }
 
+  /// The run strip belongs to a live drill only: a finished run is told in the
+  /// report, and the other modes have a single problem to track.
+  private var isDrillRunActive: Bool {
+    chatService.currentMode == .drill &&
+      chatService.interviewSession.activeAttempt?.status == .inProgress
+  }
+
   private var shouldExposeKnowledgeSources: Bool {
     guard chatService.currentKnowledgeStudySpaceID != nil else {
       return false
@@ -336,6 +343,17 @@ struct MainContentView: View {
       Rectangle()
         .fill(.quaternary)
         .frame(height: 1)
+
+      if isDrillRunActive {
+        DrillRunStripView(
+          run: chatService.interviewSession.drillRun,
+          nextDifficulty: chatService.interviewSession.suggestedNextDifficulty
+        )
+
+        Rectangle()
+          .fill(.quaternary)
+          .frame(height: 1)
+      }
 
       // Same ZStack + opacity/hit-testing switching as Easel's canvas panel:
       // surfaces stay alive (editor buffers, whiteboard web view) while hidden.
@@ -397,7 +415,8 @@ struct MainContentView: View {
           evaluation: chatService.interviewSession.latestEvaluation,
           notes: chatService.interviewSession.latestNotes,
           attempt: chatService.interviewSession.activeAttempt,
-          isGenerating: isReportGenerationRequested
+          isGenerating: isReportGenerationRequested,
+          drillRun: chatService.interviewSession.drillRun
         )
         .opacity(selectedSurface == .report ? 1 : 0)
         .allowsHitTesting(selectedSurface == .report)
@@ -519,11 +538,10 @@ struct MainContentView: View {
           .help(currentWorkingDirectory)
       }
 
-      if let mode = chatService.currentMode,
+      if chatService.currentMode != nil,
          chatService.interviewSession.activeAttempt?.status == .inProgress {
         TimerPillView(
           timer: chatService.sessionTimer,
-          mode: mode,
           onEndAndGrade: endAndGrade
         )
         .layoutPriority(1)

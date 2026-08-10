@@ -1,55 +1,132 @@
-# CodingBuddy
+# Spar
 
-A macOS interview-prep coding app. Practice technical interviews with an AI interviewer that presents problems, watches you work, gives budgeted hints, and grades you against a real rubric — powered by the local CLI agents you already use (Claude Code or Codex) or any local/OpenAI-compatible model.
+Spar is a native macOS app for deliberate technical-interview practice. It pairs an AI
+interviewer with a real coding workspace, source-grounded repository study, structured
+feedback, and progress tracking so you can practice the way you expect to perform.
 
-## Session modes
+Use Spar for a timed mock interview, a quick sequence of drills, an untimed tutoring
+session, a system-design discussion, or behavioral coaching. You choose the AI provider
+for each session and keep your attempts, study plans, and progress on your Mac.
 
-- **Mock Interview** — timed, one problem, a strict senior-interviewer persona. Hints only on request, within budget, escalating from a nudge to a skeleton. When the timer expires (or you hit *End & Grade*) the interviewer drops the role-play and grades: correctness, complexity analysis, communication, code quality, speed.
-- **Drills** — rapid-fire LeetCode-style reps. Quick verdicts, next question adapts difficulty to your recent scores.
-- **Practice** — untimed Socratic tutoring. Explanations and worked solutions allowed after an attempt; gentler optional grading.
-- **System Design** — staff-level design interview: requirements → estimation → high-level → deep dives, on a shared **excalidraw whiteboard** rendered in-app via MCP Apps.
-- **Behavioral** — STAR coaching, one question at a time with probing follow-ups.
+## What you can do
 
-## How it works
+### Practice in five modes
 
-- Every question the agent presents is captured into a **local question bank** (SQLite) and can be retried later.
-- Evaluations arrive as structured `buddy-eval` blocks in the transcript, parsed and persisted as rubric scores plus **"room for improvement" notes**.
-- The **Dashboard** charts per-topic skill, score trends per mode, open improvement notes, and recent attempts with one-click retry.
-- Each attempt gets its own workspace under `~/Documents/CodingBuddy/Workspaces/`, editable in the built-in native code editor (tree-sitter highlighting, 43 languages).
+- **Mock Interview** — Complete one timed problem with limited, progressively stronger
+  hints, then receive rubric-based feedback.
+- **Drills** — Work through rapid-fire problems whose difficulty adapts to your recent
+  answers.
+- **Practice** — Learn through untimed, interactive tutoring with explanations and
+  worked solutions when you need them.
+- **System Design** — Clarify requirements, estimate scale, sketch a design on the
+  integrated whiteboard, and defend your trade-offs.
+- **Behavioral** — Develop STAR stories through realistic questions and probing
+  follow-ups.
 
-## Providers
+### Learn a repository
 
-Interchangeable, selected per session:
+Add a local repository as a study resource and Spar will:
 
-- **Claude** — [Claude Code](https://github.com/anthropics/claude-code) CLI via [ClaudeCodeSDK](https://github.com/jamesrochabrun/ClaudeCodeSDK)
-- **Codex** — OpenAI Codex CLI via [CodexSDK](https://github.com/jamesrochabrun/CodexSDK)
-- **Local / API** — Ollama, LM Studio, any OpenAI-compatible endpoint, or on-device MLX models
+1. Index supported source and documentation files into searchable passages.
+2. Inspect the repository's structure and concepts.
+3. Generate a source-grounded learning plan organized as a flexible checklist.
+4. Start an interactive study session from any plan item.
+5. Preserve completion state so you can stop, revisit topics, or learn out of order.
 
-Auth is delegated to the underlying CLI — no API keys stored by the app.
+Adding a repository is read-only: Spar does not run `git add`, create commits, push
+changes, or modify the source repository. The searchable index is stored locally. When
+you ask a source-grounded question, relevant passages may be sent to the AI provider you
+selected for that session.
+
+### Work and review in one place
+
+- A per-attempt coding workspace with an integrated source editor
+- Source browsing and citations for repository-backed study
+- A whiteboard for system-design sessions
+- Configurable hint budgets
+- Structured grading with scores, verdicts, and improvement notes
+- A dashboard for topic-level skill, score trends, and past attempts
+- Persistent reports and one-click retry
+
+## AI providers
+
+Spar supports interchangeable providers selected per session:
+
+- **Claude** through the [Claude Code](https://github.com/anthropics/claude-code) CLI
+- **Codex** through the OpenAI Codex CLI
+- **Local / API** through Ollama, LM Studio, OpenAI-compatible endpoints, or on-device
+  MLX models
+
+Claude and Codex authentication is delegated to their CLIs. Spar does not store their API
+keys.
 
 ## Building
 
+Requirements:
+
+- macOS with a current version of Xcode
+- Authentication or local configuration for at least one supported AI provider
+
+Clone the repository and build the app:
+
 ```bash
+git clone https://github.com/jamesrochabrun/Spar.git
+cd Spar
 xcodebuild -project CodingBuddy.xcodeproj -scheme CodingBuddy build
 ```
 
-Packages (`swift test` in each, or run the `CodingBuddyChat` scheme tests via Xcode):
+Open `CodingBuddy.xcodeproj` in Xcode if you prefer to build and run from the IDE.
 
-| Package | Role |
-|---|---|
-| `InterviewKit` | Domain models, SQLite question bank / attempts / evaluations, timer, parsers |
-| `CodingBuddyChat` | Chat service, interview prompts, sidebar, surfaces, dashboard |
-| `CodingBuddyClaudeCodeUI` | Chat engine (module `ClaudeCodeCore`): view models, streaming, storage, permissions |
-| `BuddyMCPUI` | MCP Apps host: WKWebView JSON-RPC bridge, MCP clients, side panel |
-| `CodingBuddyKit` | Zero-dep protocol seams and design tokens |
-| `CodingBuddyAgentHarness` / `CodingBuddyAgentMLX` | Local/API agent loop + on-device MLX |
+## Architecture
 
-## Data locations
+| Package | Responsibility |
+| --- | --- |
+| `InterviewKit` | Session models, question bank, attempts, evaluations, timers, and structured-output parsers |
+| `KnowledgeKit` | Repository indexing, search, study spaces, learning plans, and local persistence |
+| `CodingBuddyChat` | Chat orchestration, prompts, sidebar, editor surfaces, reports, dashboard, and study UI |
+| `CodingBuddyClaudeCodeUI` | Provider runtime, streaming chat, session storage, and permissions |
+| `BuddyMCPUI` | MCP Apps hosting and the in-app side panel |
+| `CodingBuddyKit` | Shared protocols, branding, and design tokens |
+| `CodingBuddyAgentHarness` / `CodingBuddyAgentMLX` | Local/API agent loop and on-device MLX support |
 
-- Question bank / attempts / evaluations: `~/Library/Application Support/CodingBuddy/interview_bank.sqlite`
-- Chat sessions: `~/Library/Application Support/CodingBuddy/claude_code_sessions.sqlite`
-- Attempt workspaces: `~/Documents/CodingBuddy/Workspaces/`
-- MCP servers (whiteboard etc.): `~/.config/claude/mcp-config.json`
+The app parses two structured transcript contracts:
+
+- `buddy-question/v1` captures generated interview questions in the local question bank.
+- `buddy-eval/v1` captures rubric scores, verdicts, summaries, and improvement notes.
+
+## Local data
+
+Spar keeps its durable data on your Mac:
+
+| Data | Location |
+| --- | --- |
+| Attempt workspaces | `~/Documents/CodingBuddy/Workspaces/` |
+| Questions, attempts, and evaluations | `~/Library/Application Support/CodingBuddy/interview_bank.sqlite` |
+| Chat sessions | `~/Library/Application Support/CodingBuddy/claude_code_sessions.sqlite` |
+| Repository indexes and study plans | `~/Library/Application Support/CodingBuddy/knowledge_library.sqlite` |
+| MCP configuration | `~/.config/claude/mcp-config.json` |
+
+The `CodingBuddy` directory names are retained as stable internal storage identifiers so
+existing local data continues to work after the app's rename to Spar.
+
+## Testing
+
+Package tests live beside each package in `Packages/*/Tests`. `swift test` works for
+`InterviewKit`, `KnowledgeKit`, `CodingBuddyKit`, and `BuddyMCPUI`. Run
+`CodingBuddyChat` tests through Xcode because of its transitive dependencies:
+
+```bash
+xcodebuild test -scheme CodingBuddyChat -destination 'platform=macOS'
+```
+
+Run app-level tests with:
+
+```bash
+xcodebuild test \
+  -project CodingBuddy.xcodeproj \
+  -scheme CodingBuddy \
+  -destination 'platform=macOS'
+```
 
 ## License
 

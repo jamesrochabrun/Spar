@@ -17,24 +17,29 @@ struct WorkspaceChromeSourceTests {
   }
 
   @Test
-  func modeGroupPlusButtonPrecedesChevronButton() throws {
+  func sidebarUsesFlatRowsAndOnlyTheTopBarCreateControl() throws {
     let source = try sourceContents(
       "Sources/CodingBuddyChat/Sidebar/SidebarView.swift"
     )
 
-    let sectionStart = try #require(source.range(of: "private func modeGroupSection"))
-    let sectionEnd = try #require(
-      source.range(of: "private func startFirstSessionTitle")
-    )
-    let section = source[sectionStart.lowerBound..<sectionEnd.lowerBound]
-    let plusRange = try #require(
-      section.range(of: "systemImage: \"plus\"")
-    )
-    let chevronRange = try #require(
-      section.range(of: "systemImage: \"chevron.right\"")
+    #expect(source.contains("rows: sidebarViewModel.sessionRows"))
+    #expect(!source.contains("modeGroupSection"))
+    #expect(!source.contains("requestNewSession(mode:"))
+
+    let createControlCount = source.components(
+      separatedBy: "systemImage: \"plus\""
+    ).count - 1
+    #expect(createControlCount == 1)
+  }
+
+  @Test
+  func sessionRowsShowTheirModeAsAccessibleMetadata() throws {
+    let source = try sourceContents(
+      "Sources/CodingBuddyChat/Sidebar/SidebarSessionRow.swift"
     )
 
-    #expect(plusRange.lowerBound < chevronRange.lowerBound)
+    #expect(source.contains("Label(row.mode.displayName, systemImage: row.mode.systemImage)"))
+    #expect(source.contains("Open \\(row.mode.displayName) session"))
   }
 
   private func sourceContents(_ relativePath: String) throws -> String {

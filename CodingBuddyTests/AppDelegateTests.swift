@@ -22,7 +22,7 @@ struct AppDelegateTests {
     #expect(titles.contains("Open App Window"))
     #expect(!titles.contains("Open Chat Bar"))
     #expect(titles.contains("Check for Updates..."))
-    #expect(titles.contains("Quit CodingBuddy"))
+    #expect(titles.contains("Quit Spar"))
   }
 
   @Test
@@ -37,7 +37,7 @@ struct AppDelegateTests {
     #expect(titles.contains("Open App Window"))
     #expect(titles.contains("Open Chat Bar"))
     #expect(titles.contains("Check for Updates..."))
-    #expect(titles.contains("Quit CodingBuddy"))
+    #expect(titles.contains("Quit Spar"))
   }
 
   @Test

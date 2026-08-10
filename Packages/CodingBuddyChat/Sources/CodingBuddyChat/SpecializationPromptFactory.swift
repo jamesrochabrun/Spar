@@ -56,10 +56,14 @@ enum SpecializationPromptFactory {
           """
       case .mockInterview, .practice, .drill:
         return """
-          The candidate is interviewing for an iOS role: weigh Swift fluency in your \
-          dimension comments — idiomatic API use, value vs reference semantics, \
-          correct concurrency (actors/async-await over manual locking), and \
-          awareness of the memory cost of their choices.
+          The candidate is interviewing for an iOS role: weigh their platform \
+          judgment in your dimension comments — whether they reason correctly \
+          about value vs reference semantics, concurrency safety (actors and \
+          async/await vs manual locking), retain cycles, and the memory cost of \
+          their choices. Judge that understanding from what they explain, not \
+          from whether they recalled an API name or spelled a Swift construct \
+          correctly. Never deduct for Swift syntax, API signatures, or \
+          non-idiomatic phrasing that a compiler or a search would settle.
           """
       }
     }
@@ -79,8 +83,12 @@ enum SpecializationPromptFactory {
         collection-view updates (hashing / LCS), a thread-safe request \
         deduplicator (actors). The underlying algorithm stays classic; the \
         story is iOS.
-        - The candidate solves in Swift: set `language_hint` to "swift" and \
-        expect idiomatic Swift (value types, optionals, no force-unwraps).
+        - The candidate solves in Swift: set `language_hint` to "swift". Expect \
+        sound Swift thinking (value semantics, optional handling, no force \
+        unwraps as a design choice) — but never grade the spelling of it. Hand \
+        over signatures, imports, XCTest or Swift Testing scaffolds, protocol \
+        and mock declarations, and SwiftUI harnesses the moment they are \
+        needed; that support is free and outside the assessment.
         - In `topics`, pair the algorithm slug with the matching ios-* slug \
         when one applies (e.g. ["hash-maps", "ios-concurrency"]).
         - Probe like an iOS interviewer: complexity of Swift collection \
@@ -109,6 +117,10 @@ enum SpecializationPromptFactory {
         - iOS fundamentals (ARC, concurrency, layout, persistence) are \
         first-class study topics here — use ios-* slugs for them, and build \
         runnable Swift examples in the workspace when they help.
+        - When an exercise involves tests, write the test file yourself \
+        (imports, `XCTestCase` or `@Suite`, setup, one worked case) and leave \
+        the candidate the part that teaches something: which cases matter and \
+        why. Retyping an Xcode-generated template is not practice.
         """
     case .systemDesign:
       return """

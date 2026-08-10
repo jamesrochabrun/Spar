@@ -1,25 +1,10 @@
 import AppKit
 import CodingBuddyKit
+import PierreDiffsSwift
 import SwiftUI
 import Testing
 
 @testable import CodingBuddyChat
-
-private final class FindPanelHostingView: NSView {}
-
-private func withCurrentDrawingAppearance<T>(_ name: NSAppearance.Name, _ body: () -> T) -> T {
-  guard let appearance = NSAppearance(named: name) else { return body() }
-
-  var result: T?
-  appearance.performAsCurrentDrawingAppearance {
-    result = body()
-  }
-  return result ?? body()
-}
-
-private func brightness(of color: NSColor) -> CGFloat {
-  (color.usingColorSpace(.sRGB) ?? color).brightnessComponent
-}
 
 private func hexString(of color: Color) -> String {
   let resolvedColor = NSColor(color).usingColorSpace(.sRGB) ?? NSColor(color)
@@ -31,6 +16,34 @@ private func hexString(of color: Color) -> String {
 
 @Suite("SourceCodeEditorView")
 struct SourceCodeEditorViewTests {
+  @Test
+  func saveEchoKeepsTheExistingEditorDocument() {
+    var state = ProjectResourceTextEditorState(text: "let value = 1\n")
+    let documentID = state.documentID
+
+    state.editorTextChanged("let value = 2\n")
+    state.synchronizeExternalText("let value = 2\n")
+
+    #expect(state.editorText == "let value = 2\n")
+    #expect(state.savedText == "let value = 2\n")
+    #expect(!state.hasUnsavedChanges)
+    #expect(state.documentID == documentID)
+  }
+
+  @Test
+  func externalContentReplacementCreatesANewEditorDocument() {
+    var state = ProjectResourceTextEditorState(text: "let value = 1\n")
+    let documentID = state.documentID
+
+    state.editorTextChanged("unsaved local edit\n")
+    state.synchronizeExternalText("replacement from disk\n")
+
+    #expect(state.editorText == "replacement from disk\n")
+    #expect(state.savedText == "replacement from disk\n")
+    #expect(!state.hasUnsavedChanges)
+    #expect(state.documentID != documentID)
+  }
+
   @Test
   func displayModeHighlightsNormalFiles() {
     let content = Array(repeating: "let value = 1", count: 1_000).joined(separator: "\n")
@@ -59,72 +72,79 @@ struct SourceCodeEditorViewTests {
   }
 
   @Test
-  func editorOptionsDisableMinimapAndToggleWrappingByMode() {
-    let highlighted = EaselSourceEditorOptions(
+  func editorOptionsPreserveWorkspaceWrappingAndForcePreviewWrapping() {
+    let highlighted = EaselPierreEditorOptions(
       displayMode: .highlighted,
       isEditable: true,
       isWrapLinesEnabled: true
     )
-    let plainText = EaselSourceEditorOptions(
+    let highlightedWithoutWrapping = EaselPierreEditorOptions(
+      displayMode: .highlighted,
+      isEditable: true,
+      isWrapLinesEnabled: false
+    )
+    let plainText = EaselPierreEditorOptions(
+      displayMode: .plainText,
+      isEditable: true,
+      isWrapLinesEnabled: true
+    )
+    let readOnly = EaselPierreEditorOptions(
+      displayMode: .highlighted,
+      isEditable: false,
+      isWrapLinesEnabled: false
+    )
+    let readOnlyFastMode = EaselPierreEditorOptions(
+      displayMode: .plainText,
+      isEditable: false,
+      isWrapLinesEnabled: false
+    )
+
+    #expect(highlighted.overflowMode.rawValue == "wrap")
+    #expect(highlightedWithoutWrapping.overflowMode.rawValue == "scroll")
+    #expect(plainText.overflowMode.rawValue == "scroll")
+    #expect(readOnly.overflowMode.rawValue == "wrap")
+    #expect(readOnlyFastMode.overflowMode.rawValue == "wrap")
+    #expect(highlighted.renderOptions.tokenizeMaxLength == nil)
+    #expect(highlighted.renderOptions.tokenizeMaxLineLength == nil)
+    #expect(plainText.renderOptions.tokenizeMaxLength == 0)
+    #expect(plainText.renderOptions.tokenizeMaxLineLength == 0)
+  }
+
+  @Test
+  func editorOptionsConfigurePierreAsAFullDocumentEditor() {
+    let options = EaselPierreEditorOptions(
+      displayMode: .highlighted,
+      isEditable: true,
+      isWrapLinesEnabled: true
+    )
+    let readOnlyOptions = EaselPierreEditorOptions(
+      displayMode: .highlighted,
+      isEditable: false,
+      isWrapLinesEnabled: true
+    )
+
+    #expect(options.isEditing)
+    #expect(readOnlyOptions.isEditing == false)
+    #expect(options.renderOptions.diffIndicators.rawValue == "none")
+    #expect(options.renderOptions.lineDiffType.rawValue == "none")
+    #expect(options.renderOptions.disableFileHeader)
+    #expect(options.renderOptions.disableBackground)
+    #expect(options.renderOptions.expandUnchanged)
+    #expect(options.editorOptions.historyMaxEntries == 100)
+    #expect(options.editorOptions.matchBrackets)
+    #expect(options.editorOptions.autoSurround.rawValue == "default")
+  }
+
+  @Test
+  func fastModeDisablesExpensiveEditorFeatures() {
+    let options = EaselPierreEditorOptions(
       displayMode: .plainText,
       isEditable: true,
       isWrapLinesEnabled: true
     )
 
-    #expect(highlighted.showMinimap == false)
-    #expect(highlighted.wrapLines)
-    #expect(highlighted.showFoldingRibbon)
-    #expect(plainText.showMinimap == false)
-    #expect(plainText.wrapLines == false)
-    #expect(plainText.showFoldingRibbon == false)
-  }
-
-  @Test
-  func editorThemeResolvesColorsFromRequestedColorScheme() {
-    let options = EaselSourceEditorOptions(
-      displayMode: .highlighted,
-      isEditable: true,
-      isWrapLinesEnabled: true
-    )
-
-    let lightThemeCreatedInDarkAppearance = withCurrentDrawingAppearance(.darkAqua) {
-      options.makeSourceEditorConfiguration(colorScheme: .light).appearance.theme
-    }
-    let darkThemeCreatedInLightAppearance = withCurrentDrawingAppearance(.aqua) {
-      options.makeSourceEditorConfiguration(colorScheme: .dark).appearance.theme
-    }
-
-    #expect(brightness(of: lightThemeCreatedInDarkAppearance.background) > 0.8)
-    #expect(brightness(of: lightThemeCreatedInDarkAppearance.text.color) < 0.3)
-    #expect(brightness(of: darkThemeCreatedInLightAppearance.background) < 0.3)
-    #expect(brightness(of: darkThemeCreatedInLightAppearance.text.color) > 0.7)
-  }
-
-  @Test
-  func editorCaretUsesVisibleThemeColorInsteadOfSystemCursor() {
-    let options = EaselSourceEditorOptions(
-      displayMode: .highlighted,
-      isEditable: true,
-      isWrapLinesEnabled: true
-    )
-
-    let lightAppearance = options.makeSourceEditorConfiguration(colorScheme: .light).appearance
-    let darkAppearance = options.makeSourceEditorConfiguration(colorScheme: .dark).appearance
-
-    // The system NSTextInsertionIndicator ignores the theme's insertionPoint and
-    // follows the app accent color, which is near-invisible on the editor
-    // background. The internal cursor must be used so the theme color applies.
-    #expect(lightAppearance.useSystemCursor == false)
-    #expect(darkAppearance.useSystemCursor == false)
-
-    let lightContrast = abs(
-      brightness(of: lightAppearance.theme.insertionPoint) - brightness(of: lightAppearance.theme.background)
-    )
-    let darkContrast = abs(
-      brightness(of: darkAppearance.theme.insertionPoint) - brightness(of: darkAppearance.theme.background)
-    )
-    #expect(lightContrast > 0.4)
-    #expect(darkContrast > 0.4)
+    #expect(options.editorOptions.matchBrackets == false)
+    #expect(options.editorOptions.autoSurround.rawValue == "never")
   }
 
   @Test
@@ -142,13 +162,15 @@ struct SourceCodeEditorViewTests {
   }
 
   @Test
-  func languageResolverDetectsSupportedFiles() {
+  func languageResolverDetectsPierreSupportedFiles() {
     let cases: [(fileName: String, expectedIdentifier: String)] = [
       ("App.swift", "swift"),
-      ("Component.tsx", "typescript"),
+      ("Component.tsx", "tsx"),
+      ("types.d.ts", "typescript"),
       ("package.json", "json"),
       ("README.md", "markdown"),
       ("Dockerfile", "dockerfile"),
+      ("Makefile", "makefile"),
       ("site.yaml", "yaml"),
     ]
 
@@ -164,6 +186,17 @@ struct SourceCodeEditorViewTests {
   }
 
   @Test
+  func languageResolverUsesShebangForExtensionlessScripts() {
+    #expect(
+      SourceEditorLanguageResolver.languageIdentifier(
+        forFileName: "script",
+        content: "#!/usr/bin/env python3\nprint('hello')",
+        displayMode: .highlighted
+      ) == "python"
+    )
+  }
+
+  @Test
   func languageResolverFallsBackToPlainTextForFastMode() {
     #expect(
       SourceEditorLanguageResolver.languageIdentifier(
@@ -171,47 +204,6 @@ struct SourceCodeEditorViewTests {
         content: "let value = 1",
         displayMode: .plainText
       ) == "PlainText"
-    )
-  }
-
-  @Test
-  @MainActor
-  func findPanelRepairBringsCodeEditFindPanelToFront() {
-    let rootView = NSView()
-    let codeEditContainer = NSView()
-    let findPanel = FindPanelHostingView()
-    let editorScrollView = NSScrollView()
-
-    rootView.addSubview(codeEditContainer)
-    codeEditContainer.addSubview(findPanel)
-    codeEditContainer.addSubview(editorScrollView)
-
-    let didRepair = SourceEditorFindPanelHitTestingFix.bringFindPanelToFront(in: rootView)
-
-    #expect(didRepair)
-    #expect(codeEditContainer.subviews.last === findPanel)
-    #expect(findPanel.layer?.zPosition == 1000)
-  }
-
-  @Test
-  func findNavigatorAdvancesAndWrapsThroughMatches() {
-    let text = "provider\nlet providerValue = provider"
-    let matches = SourceEditorFindNavigator.matchRanges(query: "provider", in: text)
-
-    #expect(matches.map(\.location) == [0, 13, 29])
-    #expect(
-      SourceEditorFindNavigator.targetRange(
-        matches: matches,
-        currentRange: matches[0],
-        direction: .next
-      ) == matches[1]
-    )
-    #expect(
-      SourceEditorFindNavigator.targetRange(
-        matches: matches,
-        currentRange: matches[2],
-        direction: .next
-      ) == matches[0]
     )
   }
 }

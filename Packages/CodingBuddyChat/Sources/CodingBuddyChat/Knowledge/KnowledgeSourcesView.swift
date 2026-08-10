@@ -74,11 +74,16 @@ public struct KnowledgeSourcesView: View {
         }
         Spacer(minLength: 0)
       }
-      .frame(minWidth: 250, idealWidth: 320, maxWidth: 420)
+      .frame(minWidth: 260, idealWidth: 320, maxWidth: 360)
       .frame(maxHeight: .infinity, alignment: .top)
 
       KnowledgeChunkPreview(chunk: library.selectedChunk)
-        .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
+        .frame(
+          minWidth: 440,
+          idealWidth: 640,
+          maxWidth: .infinity,
+          maxHeight: .infinity
+        )
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .task(id: LibraryQuery(studySpaceID: studySpace.id, searchText: searchText)) {

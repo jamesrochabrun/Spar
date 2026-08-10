@@ -38,7 +38,7 @@ public struct ChatPanelView: View {
           columnVisibility: $columnVisibility,
           triggerInputFocus: $triggerInputFocus,
           uiConfiguration: UIConfiguration(
-            appName: "CodingBuddy",
+            appName: AppBrand.name,
             showSettingsInNavBar: false,
             showRiskData: false,
             showTokenCount: true,

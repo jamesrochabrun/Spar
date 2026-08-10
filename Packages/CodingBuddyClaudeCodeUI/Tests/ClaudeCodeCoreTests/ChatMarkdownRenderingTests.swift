@@ -115,4 +115,43 @@ final class ChatMarkdownRenderingTests: XCTestCase {
       "`📚 Study plan saved`"
     )
   }
+
+  func testLessonFenceCollapsesAndKeepsSurroundingProse() {
+    let renderer = DefaultChatMarkdownRenderer()
+    let markdown = """
+      Here's your next task.
+
+      ```buddy-lesson
+      {"schema":"buddy-lesson/v1","item_id":"storage","step":1,"total_steps":3,
+       "outcome":"Explain the migration order.","scenario_markdown":"A migration fails.",
+       "inspect_steps":["Find the rollback path"]}
+      ```
+      """
+
+    // The contract JSON never reaches the transcript — the Lesson tab renders
+    // it — but the agent's short intro line still does.
+    XCTAssertEqual(
+      renderer.displayMarkdown(for: markdown, isComplete: true),
+      """
+      Here's your next task.
+
+      `🎓 Lesson shown in the Lesson tab`
+      """
+    )
+  }
+
+  func testUnterminatedLessonFenceCollapsesToStreamingChip() {
+    let renderer = DefaultChatMarkdownRenderer()
+    let markdown = """
+      ```buddy-lesson
+      {"schema":"buddy-lesson/v1","item_id":"storage",
+      """
+
+    // Mid-stream the JSON must stay hidden too, or the learner watches a raw
+    // object type itself out.
+    XCTAssertEqual(
+      renderer.displayMarkdown(for: markdown, isComplete: true),
+      "`🎓 Preparing lesson…`"
+    )
+  }
 }

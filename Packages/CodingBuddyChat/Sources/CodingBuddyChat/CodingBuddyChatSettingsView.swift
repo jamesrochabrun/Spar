@@ -18,7 +18,7 @@ public struct CodingBuddyChatSettingsView: View {
   public var body: some View {
     ClaudeCodeGlobalSettingsSceneView(
       uiConfiguration: UIConfiguration(
-        appName: "CodingBuddy",
+        appName: AppBrand.name,
         showSettingsInNavBar: false,
         showRiskData: false,
         showTokenCount: true,

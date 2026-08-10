@@ -11,6 +11,7 @@ struct ProjectResourceTextPreview: View {
   let isSaving: Bool
   let onSave: (String) -> Void
   let isRunning: Bool
+  let onUnsavedChangesChange: (Bool) -> Void
   /// When set, a Run button appears that saves and runs the current buffer.
   let onRun: ((String) -> Void)?
   /// When set, a Review button appears that saves the buffer and asks Buddy
@@ -23,6 +24,7 @@ struct ProjectResourceTextPreview: View {
     isSaving: Bool,
     onSave: @escaping (String) -> Void,
     isRunning: Bool = false,
+    onUnsavedChangesChange: @escaping (Bool) -> Void = { _ in },
     onRun: ((String) -> Void)? = nil,
     onReview: ((String) -> Void)? = nil
   ) {
@@ -31,18 +33,13 @@ struct ProjectResourceTextPreview: View {
     self.isSaving = isSaving
     self.onSave = onSave
     self.isRunning = isRunning
+    self.onUnsavedChangesChange = onUnsavedChangesChange
     self.onRun = onRun
     self.onReview = onReview
-    self._editorText = State(initialValue: text)
-    self._savedText = State(initialValue: text)
-    self._displayMode = State(initialValue: .displayMode(for: text))
+    self._editorState = State(initialValue: ProjectResourceTextEditorState(text: text))
   }
 
-  @State private var editorText: String
-  @State private var savedText: String
-  @State private var displayMode: EditorDisplayMode
-  @State private var editorDocumentID = UUID()
-  @State private var hasUnsavedChanges = false
+  @State private var editorState: ProjectResourceTextEditorState
   @Environment(\.colorScheme) private var colorScheme
 
   var body: some View {
@@ -50,10 +47,12 @@ struct ProjectResourceTextPreview: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(previewStyle.editorBackground)
     .onChange(of: fileName) { _, _ in
-      resetEditor(with: text)
+      editorState.reset(with: text)
+      onUnsavedChangesChange(false)
     }
     .onChange(of: text) { _, newText in
-      resetEditor(with: newText)
+      editorState.synchronizeExternalText(newText)
+      onUnsavedChangesChange(editorState.hasUnsavedChanges)
     }
   }
 
@@ -62,10 +61,10 @@ struct ProjectResourceTextPreview: View {
       editorHeader
 
       SourceCodeEditorView(
-        text: $editorText,
+        text: $editorState.editorText,
         fileName: fileName,
-        documentID: editorDocumentID,
-        displayMode: displayMode,
+        documentID: editorState.documentID,
+        displayMode: editorState.displayMode,
         isEditable: true,
         onTextChange: editorTextChanged,
         onIdleTextSnapshot: editorIdleSnapshot
@@ -80,7 +79,7 @@ struct ProjectResourceTextPreview: View {
         .font(.system(size: 11, weight: .medium, design: .monospaced))
         .foregroundStyle(previewStyle.headerSecondaryText)
 
-      if let badgeLabel = displayMode.badgeLabel {
+      if let badgeLabel = editorState.displayMode.badgeLabel {
         Text(badgeLabel)
           .font(.system(size: 10, weight: .medium))
           .foregroundStyle(previewStyle.headerSecondaryText)
@@ -92,7 +91,7 @@ struct ProjectResourceTextPreview: View {
           )
       }
 
-      if hasUnsavedChanges {
+      if editorState.hasUnsavedChanges {
         Text("Modified")
           .font(.system(size: 10, weight: .medium))
           .foregroundStyle(.orange)
@@ -106,9 +105,9 @@ struct ProjectResourceTextPreview: View {
 
       Spacer(minLength: 8)
 
-      if hasUnsavedChanges {
+      if editorState.hasUnsavedChanges {
         Button("Save") {
-          onSave(editorText)
+          onSave(editorState.editorText)
         }
         .keyboardShortcut("s", modifiers: .command)
         .buttonStyle(.borderedProminent)
@@ -118,7 +117,7 @@ struct ProjectResourceTextPreview: View {
 
       if let onRun {
         Button("Run", systemImage: "play.fill") {
-          onRun(editorText)
+          onRun(editorState.editorText)
         }
         .keyboardShortcut("r", modifiers: .command)
         .buttonStyle(.borderedProminent)
@@ -129,7 +128,7 @@ struct ProjectResourceTextPreview: View {
 
       if let onReview {
         Button("Review", systemImage: "graduationcap") {
-          onReview(editorText)
+          onReview(editorState.editorText)
         }
         .keyboardShortcut("e", modifiers: [.command, .shift])
         .buttonStyle(.borderedProminent)
@@ -151,8 +150,8 @@ struct ProjectResourceTextPreview: View {
   private var languageDisplayName: String {
     SourceEditorLanguageResolver.languageIdentifier(
       forFileName: fileName,
-      content: editorText,
-      displayMode: displayMode
+      content: editorState.editorText,
+      displayMode: editorState.displayMode
     )
   }
 
@@ -161,20 +160,12 @@ struct ProjectResourceTextPreview: View {
   }
 
   private func editorTextChanged(_ updatedText: String) {
-    if !hasUnsavedChanges {
-      hasUnsavedChanges = updatedText != savedText
-    }
+    editorState.editorTextChanged(updatedText)
+    onUnsavedChangesChange(editorState.hasUnsavedChanges)
   }
 
   private func editorIdleSnapshot(_ idleText: String) {
-    hasUnsavedChanges = idleText != savedText
-  }
-
-  private func resetEditor(with text: String) {
-    editorText = text
-    savedText = text
-    displayMode = .displayMode(for: text)
-    editorDocumentID = UUID()
-    hasUnsavedChanges = false
+    editorState.editorReachedIdle(with: idleText)
+    onUnsavedChangesChange(editorState.hasUnsavedChanges)
   }
 }

@@ -20,15 +20,32 @@ struct SidebarSessionRow: View {
     HStack(spacing: 4) {
       Button(action: onSelect) {
         HStack(spacing: 8) {
-          Circle()
-            .fill(isSelected ? EaselDesignSystem.Palette.accent : EaselDesignSystem.Palette.tertiaryText(for: colorScheme))
-            .frame(width: 6, height: 6)
+          ZStack {
+            Circle()
+              .stroke(
+                isSelected
+                  ? selectionAccent
+                  : EaselDesignSystem.Palette.tertiaryText(for: colorScheme),
+                lineWidth: 1
+              )
+
+            if isSelected {
+              Circle()
+                .fill(selectionAccent)
+                .padding(2)
+            }
+          }
+          .frame(width: 8, height: 8)
+          .accessibilityHidden(true)
 
           VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
+              modeLabel
+
               Text(row.session.provider.displayName)
                 .font(.system(.caption2, design: .monospaced))
                 .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+                .lineLimit(1)
 
               statusBadge
 
@@ -42,7 +59,10 @@ struct SidebarSessionRow: View {
             }
 
             Text(row.displayTitle)
-              .font(.system(.caption, design: .monospaced))
+              .font(
+                .system(.caption, design: .monospaced)
+                  .weight(isSelected ? .semibold : .regular)
+              )
               .foregroundStyle(isSelected ? Color.primary : EaselDesignSystem.Palette.secondaryText(for: colorScheme))
               .lineLimit(1)
               .truncationMode(.tail)
@@ -54,6 +74,8 @@ struct SidebarSessionRow: View {
       }
       .buttonStyle(.plain)
       .frame(maxWidth: .infinity)
+      .accessibilityLabel("Open \(row.mode.displayName) session: \(row.displayTitle)")
+      .accessibilityAddTraits(isSelected ? .isSelected : [])
 
       Button(role: .destructive, action: onDelete) {
         Label("Delete \(row.displayTitle)", systemImage: "trash")
@@ -66,7 +88,25 @@ struct SidebarSessionRow: View {
       .help("Delete session and project")
       .padding(.trailing, 8)
     }
-    .background(isSelected ? EaselDesignSystem.Palette.selectedSurface(for: colorScheme) : Color.clear)
+    .background {
+      RoundedRectangle(cornerRadius: EaselDesignSystem.Radius.control)
+        .fill(isSelected ? selectionSurface : Color.clear)
+    }
+    .overlay {
+      RoundedRectangle(cornerRadius: EaselDesignSystem.Radius.control)
+        .stroke(
+          isSelected ? selectionAccent.opacity(0.65) : Color.clear,
+          lineWidth: 1
+        )
+    }
+    .overlay(alignment: .leading) {
+      if isSelected {
+        RoundedRectangle(cornerRadius: 1.5)
+          .fill(selectionAccent)
+          .frame(width: 3)
+          .padding(.vertical, 5)
+      }
+    }
     .clipShape(RoundedRectangle(cornerRadius: EaselDesignSystem.Radius.control))
     .contextMenu {
       Button(role: .destructive) {
@@ -75,6 +115,29 @@ struct SidebarSessionRow: View {
         Label("Delete", systemImage: "trash")
       }
     }
+  }
+
+  private var selectionAccent: Color {
+    EaselDesignSystem.Palette.selectionAccent(for: colorScheme)
+  }
+
+  private var selectionSurface: Color {
+    selectionAccent.opacity(colorScheme == .dark ? 0.18 : 0.12)
+  }
+
+  private var modeLabel: some View {
+    Label(row.mode.displayName, systemImage: row.mode.systemImage)
+      .font(.caption2.weight(.semibold))
+      .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+      .lineLimit(1)
+      .padding(.horizontal, 5)
+      .padding(.vertical, 2)
+      .background {
+        Capsule()
+          .fill(EaselDesignSystem.Palette.secondaryText(for: colorScheme).opacity(0.12))
+      }
+      .layoutPriority(1)
+      .accessibilityHidden(true)
   }
 
   @ViewBuilder
