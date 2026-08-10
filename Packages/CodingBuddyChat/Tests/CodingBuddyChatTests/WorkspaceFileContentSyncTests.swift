@@ -6,28 +6,37 @@ import Testing
 struct WorkspaceFileContentSyncTests {
   @Test
   func reloadsAgentWrittenContentOverACleanStaleBuffer() {
-    #expect(WorkspaceFileContentSync.shouldReload(
+    #expect(WorkspaceFileContentSync.resolution(
       diskContent: "struct Loaded {}\n",
-      displayedContent: "",
-      hasUnsavedChanges: false
-    ))
+      baselineContent: "candidate draft\n",
+      editorContent: "candidate draft\n"
+    ) == .reloadFromDisk)
   }
 
   @Test
-  func preservesUnsavedCandidateEdits() {
-    #expect(!WorkspaceFileContentSync.shouldReload(
-      diskContent: "struct Loaded {}\n",
-      displayedContent: "candidate draft\n",
-      hasUnsavedChanges: true
-    ))
+  func detectsConcurrentAgentAndCandidateEdits() {
+    #expect(WorkspaceFileContentSync.resolution(
+      diskContent: "agent solution\n",
+      baselineContent: "starter\n",
+      editorContent: "candidate solution\n"
+    ) == .conflict)
   }
 
   @Test
-  func skipsReloadWhenDiskAndEditorAlreadyMatch() {
-    #expect(!WorkspaceFileContentSync.shouldReload(
+  func acknowledgesWhenDiskMatchesTheEditor() {
+    #expect(WorkspaceFileContentSync.resolution(
+      diskContent: "candidate solution\n",
+      baselineContent: "starter\n",
+      editorContent: "candidate solution\n"
+    ) == .acknowledgeEditor)
+  }
+
+  @Test
+  func leavesEditorAloneWhenDiskStillMatchesItsBaseline() {
+    #expect(WorkspaceFileContentSync.resolution(
       diskContent: "let value = 1\n",
-      displayedContent: "let value = 1\n",
-      hasUnsavedChanges: false
-    ))
+      baselineContent: "let value = 1\n",
+      editorContent: "let value = 2\n"
+    ) == .unchanged)
   }
 }

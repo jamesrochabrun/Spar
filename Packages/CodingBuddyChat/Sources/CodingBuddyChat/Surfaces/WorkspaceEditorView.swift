@@ -18,12 +18,14 @@ public struct WorkspaceEditorView: View {
   private let question: Question?
   private let externalRefreshToken: Int
   private let codeRunner: any CodeRunning
+  private let fileMonitor: any WorkspaceFileMonitoring
   private let floatingAccessory: AnyView?
 
   @State private var files: [WorkspaceFile] = []
   @State private var selectedFile: WorkspaceFile?
   @State private var fileContent: String = ""
-  @State private var hasUnsavedEditorChanges = false
+  @State private var editorContent: String = ""
+  @State private var externalConflict: ExternalFileConflict?
   @State private var isSaving = false
   @State private var loadError: String?
   @State private var isRunning = false
@@ -43,6 +45,7 @@ public struct WorkspaceEditorView: View {
     question: Question?,
     externalRefreshToken: Int = 0,
     codeRunner: any CodeRunning = ProcessCodeRunner(),
+    fileMonitor: any WorkspaceFileMonitoring = PollingWorkspaceFileMonitor(),
     onReviewRequested: ((String) -> Void)? = nil,
     floatingAccessory: AnyView? = nil
   ) {
@@ -50,6 +53,7 @@ public struct WorkspaceEditorView: View {
     self.question = question
     self.externalRefreshToken = externalRefreshToken
     self.codeRunner = codeRunner
+    self.fileMonitor = fileMonitor
     self.onReviewRequested = onReviewRequested
     self.floatingAccessory = floatingAccessory
   }
@@ -59,6 +63,10 @@ public struct WorkspaceEditorView: View {
     let relativePath: String
     var id: String { relativePath }
     var fileName: String { url.lastPathComponent }
+  }
+
+  struct ExternalFileConflict: Equatable {
+    let fileID: String
   }
 
   public var body: some View {
@@ -71,10 +79,23 @@ public struct WorkspaceEditorView: View {
             .fill(EaselDesignSystem.Palette.border(for: colorScheme))
             .frame(height: 1)
 
+          if externalConflict?.fileID == selectedFile?.id {
+            externalConflictBar
+
+            Rectangle()
+              .fill(EaselDesignSystem.Palette.border(for: colorScheme))
+              .frame(height: 1)
+          }
+
           editorPane
         }
         .task(id: workspacePath) {
           prepareWorkspace(workspacePath)
+          let workspaceURL = URL(fileURLWithPath: workspacePath, isDirectory: true)
+          for await _ in fileMonitor.changes(in: workspaceURL) {
+            guard !Task.isCancelled else { break }
+            prepareWorkspace(workspacePath)
+          }
         }
         .onChange(of: question?.id) { _, _ in
           // The question often lands after the session starts: seed the still
@@ -166,6 +187,36 @@ public struct WorkspaceEditorView: View {
     .background(EaselDesignSystem.Palette.surface(for: colorScheme))
   }
 
+  private var externalConflictBar: some View {
+    HStack(spacing: 10) {
+      Label(
+        "This file changed on disk while you had unsaved edits.",
+        systemImage: "exclamationmark.triangle.fill"
+      )
+        .font(.caption)
+        .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
+
+      Spacer(minLength: 8)
+
+      Button("Reload Agent Version") {
+        guard let selectedFile else { return }
+        select(selectedFile)
+      }
+      .buttonStyle(.bordered)
+      .controlSize(.small)
+
+      Button("Keep My Version") {
+        guard let selectedFile else { return }
+        save(editorContent, to: selectedFile, overwritingExternalChanges: true)
+      }
+      .buttonStyle(.borderedProminent)
+      .controlSize(.small)
+    }
+    .padding(.horizontal, 14)
+    .frame(minHeight: 38)
+    .background(Color.orange.opacity(colorScheme == .dark ? 0.12 : 0.08))
+  }
+
   @ViewBuilder
   private var editorPane: some View {
     if let selectedFile {
@@ -178,15 +229,14 @@ public struct WorkspaceEditorView: View {
             save(newText, to: selectedFile)
           },
           isRunning: isRunning,
-          onUnsavedChangesChange: { hasUnsavedEditorChanges = $0 },
+          onEditorTextChange: { editorContent = $0 },
           onRun: canRun(selectedFile) ? { latestText in
             saveAndRun(latestText, file: selectedFile)
           } : nil,
           onReview: onReviewRequested.map { onReviewRequested in
             { latestText in
               // Save first so the agent reads exactly what's on screen.
-              save(latestText, to: selectedFile)
-              guard loadError == nil else { return }
+              guard save(latestText, to: selectedFile) else { return }
               onReviewRequested(selectedFile.fileName)
             }
           }
@@ -235,8 +285,7 @@ public struct WorkspaceEditorView: View {
   /// Saves the buffer, then compiles and runs the file, streaming the outcome
   /// into the console pane.
   private func saveAndRun(_ latestText: String, file: WorkspaceFile) {
-    save(latestText, to: file)
-    guard loadError == nil else { return }
+    guard save(latestText, to: file) else { return }
 
     runTask?.cancel()
     isConsoleVisible = true
@@ -284,8 +333,8 @@ public struct WorkspaceEditorView: View {
               let starter = files.first(where: { $0.url == starterURL }),
               let existing = try? String(contentsOf: starter.url, encoding: .utf8),
               existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              fileContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !hasUnsavedEditorChanges {
+              editorContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              editorContent == fileContent {
       // Question arrived after the file was created and it's still untouched
       // on disk AND in the visible buffer: seed it now. Never overwrite
       // anything the candidate typed.
@@ -305,18 +354,37 @@ public struct WorkspaceEditorView: View {
       select(preferred)
     } else if let selectedFile,
               let refreshedSelection = files.first(where: { $0.id == selectedFile.id }) {
-      reloadFromDiskIfNeeded(refreshedSelection, force: didSeed && selectedFile.url == starterURL)
+      reconcileWithDisk(refreshedSelection, forceReload: didSeed && selectedFile.url == starterURL)
     }
   }
 
-  private func reloadFromDiskIfNeeded(_ file: WorkspaceFile, force: Bool) {
+  private func reconcileWithDisk(_ file: WorkspaceFile, forceReload: Bool) {
     guard let diskContent = try? String(contentsOf: file.url, encoding: .utf8) else { return }
-    guard force || WorkspaceFileContentSync.shouldReload(
+
+    if forceReload {
+      select(file)
+      return
+    }
+
+    switch WorkspaceFileContentSync.resolution(
       diskContent: diskContent,
-      displayedContent: fileContent,
-      hasUnsavedChanges: hasUnsavedEditorChanges
-    ) else { return }
-    select(file)
+      baselineContent: fileContent,
+      editorContent: editorContent
+    ) {
+    case .unchanged:
+      if externalConflict?.fileID == file.id {
+        externalConflict = nil
+      }
+    case .reloadFromDisk:
+      select(file)
+    case .acknowledgeEditor:
+      fileContent = diskContent
+      editorContent = diskContent
+      externalConflict = nil
+      loadError = nil
+    case .conflict:
+      externalConflict = ExternalFileConflict(fileID: file.id)
+    }
   }
 
   private func refreshFiles(_ workspacePath: String) {
@@ -343,27 +411,66 @@ public struct WorkspaceEditorView: View {
   private func select(_ file: WorkspaceFile) {
     do {
       fileContent = try String(contentsOf: file.url, encoding: .utf8)
+      editorContent = fileContent
       selectedFile = file
-      hasUnsavedEditorChanges = false
+      externalConflict = nil
       loadError = nil
     } catch {
       loadError = "Could not read \(file.fileName)"
       selectedFile = nil
       fileContent = ""
-      hasUnsavedEditorChanges = false
+      editorContent = ""
+      externalConflict = nil
     }
   }
 
-  private func save(_ text: String, to file: WorkspaceFile) {
+  @discardableResult
+  private func save(
+    _ text: String,
+    to file: WorkspaceFile,
+    overwritingExternalChanges: Bool = false
+  ) -> Bool {
+    editorContent = text
+
+    if !overwritingExternalChanges,
+       let diskContent = try? String(contentsOf: file.url, encoding: .utf8) {
+      switch WorkspaceFileContentSync.resolution(
+        diskContent: diskContent,
+        baselineContent: fileContent,
+        editorContent: text
+      ) {
+      case .unchanged:
+        break
+      case .reloadFromDisk:
+        // A clean but stale editor must adopt the provider's newer file. This
+        // is especially important for Run, which used to overwrite disk first.
+        select(file)
+        return true
+      case .acknowledgeEditor:
+        fileContent = diskContent
+        editorContent = diskContent
+        externalConflict = nil
+        loadError = nil
+        return true
+      case .conflict:
+        externalConflict = ExternalFileConflict(fileID: file.id)
+        loadError = nil
+        return false
+      }
+    }
+
     isSaving = true
     defer { isSaving = false }
     do {
       try text.write(to: file.url, atomically: true, encoding: .utf8)
       fileContent = text
-      hasUnsavedEditorChanges = false
+      editorContent = text
+      externalConflict = nil
       loadError = nil
+      return true
     } catch {
       loadError = "Could not save \(file.fileName)"
+      return false
     }
   }
 
