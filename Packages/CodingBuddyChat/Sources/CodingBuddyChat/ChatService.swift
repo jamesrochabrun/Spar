@@ -631,12 +631,20 @@ public final class ChatService: ChatServiceProtocol {
     sendMessageToViewModel(BuddyAgentInstructions.reviewRequestMessage(fileName: fileName))
   }
 
-  public func requestWhiteboard() {
-    guard currentMode == .systemDesign,
-          interviewSession.activeAttempt?.status == .inProgress else {
-      return
-    }
+  public var canRequestWhiteboard: Bool {
+    SystemDesignWhiteboardRequestPolicy.canRequest(
+      mode: currentMode,
+      attemptStatus: interviewSession.activeAttempt?.status,
+      isChatLoading: chatViewModel?.isLoading == true,
+      hasChatViewModel: chatViewModel != nil
+    )
+  }
+
+  @discardableResult
+  public func requestWhiteboard() -> Bool {
+    guard canRequestWhiteboard else { return false }
     sendMessageToViewModel(BuddyAgentInstructions.whiteboardRequestMessage)
+    return true
   }
 
   /// "End & grade": transitions the attempt and sends the evaluation directive.

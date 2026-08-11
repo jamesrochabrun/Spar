@@ -6,18 +6,11 @@
 import CodingBuddyKit
 import SwiftUI
 
-/// Guides the candidate through the requirements phase before a shared MCP
-/// whiteboard exists.
+/// Offers the two actions that are actually available before a shared MCP
+/// whiteboard exists: return focus to chat or create the canvas.
 public struct SystemDesignWhiteboardEmptyView: View {
-  private static let phases = [
-    "Requirements",
-    "Estimates",
-    "Architecture",
-    "Deep Dive",
-    "Review",
-  ]
-
   private let isCreatingWhiteboard: Bool
+  private let canCreateWhiteboard: Bool
   private let onContinueInChat: () -> Void
   private let onCreateWhiteboard: () -> Void
 
@@ -25,61 +18,57 @@ public struct SystemDesignWhiteboardEmptyView: View {
 
   public init(
     isCreatingWhiteboard: Bool,
+    canCreateWhiteboard: Bool,
     onContinueInChat: @escaping () -> Void,
     onCreateWhiteboard: @escaping () -> Void
   ) {
     self.isCreatingWhiteboard = isCreatingWhiteboard
+    self.canCreateWhiteboard = canCreateWhiteboard
     self.onContinueInChat = onContinueInChat
     self.onCreateWhiteboard = onCreateWhiteboard
   }
 
   public var body: some View {
-    VStack(spacing: 24) {
-      HStack(spacing: 8) {
-        ForEach(Array(Self.phases.enumerated()), id: \.offset) { index, phase in
-          Label(
-            phase,
-            systemImage: index == 0 ? "\(index + 1).circle.fill" : "\(index + 1).circle"
-          )
-          .foregroundStyle(index == 0 ? Color.primary : Color.secondary)
-
-          if index < Self.phases.count - 1 {
-            Image(systemName: "chevron.right")
-              .foregroundStyle(.tertiary)
-              .accessibilityHidden(true)
+    ContentUnavailableView {
+      Label("Create a shared whiteboard", systemImage: "rectangle.3.group")
+    } description: {
+      Text(
+        "Clarify the problem in chat, then create an editable canvas whenever you are ready to sketch."
+      )
+    } actions: {
+      VStack(spacing: 12) {
+        if isCreatingWhiteboard {
+          HStack(spacing: 8) {
+            ProgressView()
+              .controlSize(.small)
+            Text("Buddy is creating the whiteboard…")
           }
-        }
-      }
-      .font(.caption)
-      .accessibilityElement(children: .combine)
-      .accessibilityLabel("Current phase: Requirements. Next: Estimates, Architecture, Deep Dive, Review.")
-
-      ContentUnavailableView {
-        Label("Start with requirements", systemImage: "list.clipboard")
-      } description: {
-        Text(
-          "Ask clarifying questions in chat about users, scale, consistency, offline behavior, and constraints. Create the canvas when you are ready to sketch the architecture."
-        )
-      } actions: {
-        HStack {
+          .foregroundStyle(.secondary)
+          .accessibilityElement(children: .combine)
+        } else {
           Button(
-            "Continue in Chat",
-            systemImage: "message",
-            action: onContinueInChat
+            "Create Whiteboard",
+            systemImage: "rectangle.3.group",
+            action: onCreateWhiteboard
           )
           .buttonStyle(.borderedProminent)
+          .disabled(!canCreateWhiteboard)
 
-          Button(action: onCreateWhiteboard) {
-            Label(
-              isCreatingWhiteboard ? "Creating Whiteboard…" : "Create Whiteboard",
-              systemImage: isCreatingWhiteboard ? "hourglass" : "rectangle.3.group"
-            )
+          if !canCreateWhiteboard {
+            Text("Wait for Buddy to finish responding before creating the canvas.")
+              .font(.callout)
+              .foregroundStyle(.secondary)
           }
-          .buttonStyle(.bordered)
-          .disabled(isCreatingWhiteboard)
         }
-        .controlSize(.large)
+
+        Button(
+          "Focus Chat",
+          systemImage: "message",
+          action: onContinueInChat
+        )
+        .buttonStyle(.bordered)
       }
+      .controlSize(.large)
     }
     .padding(24)
     .frame(maxWidth: .infinity, maxHeight: .infinity)

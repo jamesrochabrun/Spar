@@ -473,6 +473,7 @@ struct MainContentView: View {
       if chatService.currentMode == .systemDesign {
         SystemDesignWhiteboardEmptyView(
           isCreatingWhiteboard: isWhiteboardCreationRequested,
+          canCreateWhiteboard: chatService.canRequestWhiteboard,
           onContinueInChat: continueSystemDesignInChat,
           onCreateWhiteboard: createSystemDesignWhiteboard
         )
@@ -618,8 +619,7 @@ struct MainContentView: View {
   }
 
   private func createSystemDesignWhiteboard() {
-    isWhiteboardCreationRequested = true
-    chatService.requestWhiteboard()
+    isWhiteboardCreationRequested = chatService.requestWhiteboard()
   }
 }
 
