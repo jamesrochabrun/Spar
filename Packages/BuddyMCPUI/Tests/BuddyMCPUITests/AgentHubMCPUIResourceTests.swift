@@ -138,4 +138,37 @@ struct MCPAppCSPHardeningTests {
     #expect(html.contains("Content-Security-Policy"))
     #expect(!html.contains("attacker.com"))
   }
+
+  @Test("Changed ready notifications resend only what differs from the first delivery")
+  @MainActor
+  func changedReadyNotificationsResendOnlyWhatDiffers() {
+    let toolInput = AgentHubMCPUIOutgoingNotification(
+      method: "ui/notifications/tool-input",
+      params: .object(["arguments": .object([:])])
+    )
+    let emptyResult = AgentHubMCPUIOutgoingNotification(
+      method: "ui/notifications/tool-result",
+      params: .object(["content": .array([]), "structuredContent": .object([:])])
+    )
+    let lateResult = AgentHubMCPUIOutgoingNotification(
+      method: "ui/notifications/tool-result",
+      params: .object([
+        "content": .array([]),
+        "structuredContent": .object(["checkpointId": .string("abc123")])
+      ])
+    )
+
+    // The tool result landed after mount: only the changed tool-result resends.
+    let changed = AgentHubMCPUIWebView.Coordinator.changedNotifications(
+      current: [toolInput, lateResult],
+      delivered: [toolInput, emptyResult]
+    )
+    #expect(changed == [lateResult])
+
+    // Nothing changed: nothing resends.
+    #expect(AgentHubMCPUIWebView.Coordinator.changedNotifications(
+      current: [toolInput, emptyResult],
+      delivered: [toolInput, emptyResult]
+    ).isEmpty)
+  }
 }

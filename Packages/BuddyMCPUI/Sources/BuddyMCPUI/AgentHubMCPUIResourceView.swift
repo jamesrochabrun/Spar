@@ -226,6 +226,7 @@ public struct AgentHubMCPUIWebView: NSViewRepresentable {
     context.coordinator.loadedResource = resource
     context.coordinator.loadedTrust = networkTrust
     context.coordinator.didDeliverReadyNotifications = false
+    context.coordinator.deliveredReadyNotifications = []
     return webView
   }
 
@@ -235,7 +236,14 @@ public struct AgentHubMCPUIWebView: NSViewRepresentable {
     // (e.g. they tapped "Allow" on the consent banner). The non-persistent data
     // store means the post-consent reload starts from a clean slate.
     guard context.coordinator.loadedResource != resource
-       || context.coordinator.loadedTrust != networkTrust else { return }
+       || context.coordinator.loadedTrust != networkTrust else {
+      // Same resource, same trust — but the handler's ready notifications may
+      // have changed since first delivery (the originating tool call's result
+      // often lands after the app mounts). Push only what changed so the app
+      // still receives e.g. its checkpoint id.
+      context.coordinator.redeliverChangedReadyNotifications()
+      return
+    }
     mcpUILogger.info(
       "[MCPUIBridge] reload resource uri=\(resource.uri, privacy: .public) mime=\(resource.mimeType, privacy: .public) trust=\(String(describing: networkTrust), privacy: .public)"
     )
@@ -246,6 +254,7 @@ public struct AgentHubMCPUIWebView: NSViewRepresentable {
     context.coordinator.loadedResource = resource
     context.coordinator.loadedTrust = networkTrust
     context.coordinator.didDeliverReadyNotifications = false
+    context.coordinator.deliveredReadyNotifications = []
   }
 
   public static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
@@ -363,6 +372,9 @@ public struct AgentHubMCPUIWebView: NSViewRepresentable {
     /// Guards the one-time delivery of `appReadyNotifications` per loaded resource.
     /// Reset whenever a new resource is loaded.
     var didDeliverReadyNotifications = false
+    /// What was actually delivered, so a later change (e.g. the tool result
+    /// arriving after mount) can be diffed and pushed to the running app.
+    var deliveredReadyNotifications: [AgentHubMCPUIOutgoingNotification] = []
 
     init(bridgeHandler: (any AgentHubMCPUIBridgeHandler)?) {
       self.bridgeHandler = bridgeHandler
@@ -379,12 +391,46 @@ public struct AgentHubMCPUIWebView: NSViewRepresentable {
       let notifications = bridgeHandler?.appReadyNotifications() ?? []
       guard !notifications.isEmpty else { return }
       didDeliverReadyNotifications = true
+      deliveredReadyNotifications = notifications
       for notification in notifications {
         mcpUILogger.info(
           "[MCPUIBridge] host->app ready-notification method=\(notification.method, privacy: .public) resource=\(self.loadedResource?.uri ?? "unknown", privacy: .public)"
         )
         sendNotification(method: notification.method, params: notification.params)
       }
+    }
+
+    /// Pushes ready notifications that changed since the initial delivery. The
+    /// originating tool call's result routinely lands *after* the app mounts
+    /// (the panel appears as soon as the tool_use is recorded), so the first
+    /// delivery may carry an empty `tool-result`. Without this redelivery the
+    /// Excalidraw app never learns its checkpoint id and silently never saves
+    /// user edits back to the server.
+    func redeliverChangedReadyNotifications() {
+      guard didDeliverReadyNotifications else { return }
+      let notifications = bridgeHandler?.appReadyNotifications() ?? []
+      let changed = Self.changedNotifications(
+        current: notifications,
+        delivered: deliveredReadyNotifications
+      )
+      guard !changed.isEmpty else { return }
+      deliveredReadyNotifications = notifications
+      for notification in changed {
+        mcpUILogger.info(
+          "[MCPUIBridge] host->app late ready-notification method=\(notification.method, privacy: .public) resource=\(self.loadedResource?.uri ?? "unknown", privacy: .public)"
+        )
+        sendNotification(method: notification.method, params: notification.params)
+      }
+    }
+
+    /// Notifications worth (re)sending: present in `current` but not delivered
+    /// with identical params. Unchanged ones are skipped so the app isn't
+    /// re-fed e.g. the same `tool-input` on every SwiftUI update pass.
+    static func changedNotifications(
+      current: [AgentHubMCPUIOutgoingNotification],
+      delivered: [AgentHubMCPUIOutgoingNotification]
+    ) -> [AgentHubMCPUIOutgoingNotification] {
+      current.filter { !delivered.contains($0) }
     }
 
     public func userContentController(

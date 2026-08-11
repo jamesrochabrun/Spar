@@ -29,4 +29,13 @@ public protocol MCPAppHostBridging: AnyObject {
   func isMCPAppNetworkGranted(serverName: String, hosts: [String]) -> Bool
 
   func grantMCPAppNetwork(serverName: String, hosts: [String])
+
+  /// The app pushed `ui/update-model-context` — a summary of in-app user
+  /// activity (e.g. Excalidraw's "user moved/added elements") meant for the
+  /// model's next turn. Hosts store it and weave it into outgoing context.
+  func noteMCPAppModelContext(resource: MCPAppResource, params: AgentHubMCPUIJSONValue?)
+}
+
+public extension MCPAppHostBridging {
+  func noteMCPAppModelContext(resource: MCPAppResource, params: AgentHubMCPUIJSONValue?) {}
 }
