@@ -12,6 +12,7 @@ struct ProjectResourceTextPreview: View {
   let onSave: (String) -> Void
   let isRunning: Bool
   let onUnsavedChangesChange: (Bool) -> Void
+  let onEditorTextChange: (String) -> Void
   /// When set, a Run button appears that saves and runs the current buffer.
   let onRun: ((String) -> Void)?
   /// When set, a Review button appears that saves the buffer and asks Buddy
@@ -25,6 +26,7 @@ struct ProjectResourceTextPreview: View {
     onSave: @escaping (String) -> Void,
     isRunning: Bool = false,
     onUnsavedChangesChange: @escaping (Bool) -> Void = { _ in },
+    onEditorTextChange: @escaping (String) -> Void = { _ in },
     onRun: ((String) -> Void)? = nil,
     onReview: ((String) -> Void)? = nil
   ) {
@@ -34,6 +36,7 @@ struct ProjectResourceTextPreview: View {
     self.onSave = onSave
     self.isRunning = isRunning
     self.onUnsavedChangesChange = onUnsavedChangesChange
+    self.onEditorTextChange = onEditorTextChange
     self.onRun = onRun
     self.onReview = onReview
     self._editorState = State(initialValue: ProjectResourceTextEditorState(text: text))
@@ -49,10 +52,12 @@ struct ProjectResourceTextPreview: View {
     .onChange(of: fileName) { _, _ in
       editorState.reset(with: text)
       onUnsavedChangesChange(false)
+      onEditorTextChange(text)
     }
     .onChange(of: text) { _, newText in
       editorState.synchronizeExternalText(newText)
       onUnsavedChangesChange(editorState.hasUnsavedChanges)
+      onEditorTextChange(editorState.editorText)
     }
   }
 
@@ -162,10 +167,12 @@ struct ProjectResourceTextPreview: View {
   private func editorTextChanged(_ updatedText: String) {
     editorState.editorTextChanged(updatedText)
     onUnsavedChangesChange(editorState.hasUnsavedChanges)
+    onEditorTextChange(editorState.editorText)
   }
 
   private func editorIdleSnapshot(_ idleText: String) {
     editorState.editorReachedIdle(with: idleText)
     onUnsavedChangesChange(editorState.hasUnsavedChanges)
+    onEditorTextChange(editorState.editorText)
   }
 }

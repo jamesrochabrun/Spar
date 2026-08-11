@@ -29,6 +29,10 @@ public final class MCPAppSessionService: MCPAppHostBridging {
   public private(set) var invocationsByContext: [String: [MCPAppInvocation]] = [:]
   /// Bumped when resolution lands so the whiteboard re-derives its items.
   public private(set) var resolutionGeneration = 0
+  /// Latest `ui/update-model-context` text per app resource — the app's own
+  /// summary of what the user changed in it (e.g. Excalidraw canvas edits).
+  /// Woven into the hidden context of the next outgoing message.
+  public private(set) var modelContextTextByResourceID: [String: String] = [:]
 
   private let discoveryService: any MCPAppDiscoveryServiceProtocol
   private var toolTemplatesByServer: [MCPAppServerCacheKey: [String: MCPAppToolTemplate]] = [:]
@@ -292,6 +296,41 @@ public final class MCPAppSessionService: MCPAppHostBridging {
       projectPath: resource.projectPath,
       serverName: resource.serverName
     )
+  }
+
+  public func noteMCPAppModelContext(resource: MCPAppResource, params: AgentHubMCPUIJSONValue?) {
+    guard let text = Self.modelContextText(from: params), !text.isEmpty else { return }
+    modelContextTextByResourceID[resource.id] = text
+  }
+
+  /// Consumes (returns and clears) the stored model-context texts for the given
+  /// render items, deduplicating shared resources. Cleared on read so the same
+  /// edit summary is not re-sent on every subsequent message.
+  public func consumeModelContextTexts(for items: [MCPAppRenderItem]) -> [String] {
+    var seen = Set<String>()
+    var texts: [String] = []
+    for item in items {
+      let resourceID = item.resource.id
+      guard seen.insert(resourceID).inserted,
+            let text = modelContextTextByResourceID.removeValue(forKey: resourceID) else {
+        continue
+      }
+      texts.append(text)
+    }
+    return texts
+  }
+
+  /// Extracts the plain text of a `ui/update-model-context` payload
+  /// (`{content:[{type:"text",text}]}`, with a bare `{text}` fallback).
+  static func modelContextText(from params: AgentHubMCPUIJSONValue?) -> String? {
+    guard let params else { return nil }
+    if let blocks = params["content"]?.arrayValue {
+      let texts = blocks.compactMap { $0["text"]?.stringValue }
+      if !texts.isEmpty {
+        return texts.joined(separator: "\n")
+      }
+    }
+    return params["text"]?.stringValue
   }
 
   /// Per-launch network grants, keyed by app identity (server + sorted host

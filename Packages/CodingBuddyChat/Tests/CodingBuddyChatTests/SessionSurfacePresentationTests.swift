@@ -39,6 +39,17 @@ struct SessionSurfacePresentationTests {
   }
 
   @Test
+  func systemDesignLeadsWithWhiteboardButKeepsTheWorkspace() {
+    let surfaces = StudioSurface.available(for: .systemDesign)
+
+    #expect(surfaces.first == .whiteboard)
+    #expect(surfaces.contains(.workspace))
+    #expect(surfaces.contains(.hints))
+    #expect(surfaces.contains(.report))
+    #expect(StudioSurface.defaultSurface(for: .systemDesign) == .whiteboard)
+  }
+
+  @Test
   func learningSessionsLeadWithTheLessonAndDropTheReport() {
     let learning = StudioSurface.available(
       for: .practice,

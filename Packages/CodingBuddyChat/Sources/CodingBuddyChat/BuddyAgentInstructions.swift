@@ -113,6 +113,15 @@ public enum BuddyAgentInstructions {
     exactly 2 spaces. Never flatten a multiline block or prefix its lines with \
     comment markers. Re-read the saved file and correct its formatting before \
     handing control to the candidate.
+    - The `primary file` named in <buddy-context> is the source currently shown \
+    in the candidate's editor. When asked to update, fix, or implement the \
+    current solution, inspect and edit that existing file in place. Never create \
+    a duplicate named after a type (for example `SearchView.swift`) unless the \
+    candidate explicitly requests a new file. Re-read the exact saved file from \
+    disk before claiming the update is complete; never rely on chat memory.
+    - A graded, evaluated, or otherwise finished session keeps its workspace \
+    writable. Continue to perform explicit file-edit requests and \
+    verify those edits on disk without changing the recorded grade.
     - In `prompt_markdown`, put the same starter source in a language-tagged \
     Markdown block so \(AppBrand.name) can display it and, if needed, copy the block \
     body into the workspace. The copied file contains only the block body — \
@@ -147,6 +156,30 @@ public enum BuddyAgentInstructions {
     - Comments and improvement notes follow the same rule: point at thinking \
     gaps (a missed edge case, an unexamined trade-off, a wrong complexity \
     claim), never at syntax the candidate would fix on the first build.
+    """
+
+  /// System-design prompts must test whether the candidate discovers the
+  /// important dimensions. Listing those dimensions in the opening turns the
+  /// exercise into a checklist and gives away part of the requirements score.
+  static let systemDesignInterviewFlowPolicy = """
+    System design interview turn discipline:
+    - The opening `buddy-question` `prompt_markdown` contains only the product \
+    scenario, fixed constraints the candidate is entitled to know, and any \
+    starter scaffold. Do not include an interview roadmap, requirement \
+    categories, sample clarification questions, suggested components, trade-off \
+    checklists, or deep-dive topics. Keep expected discoveries and answers in \
+    private `reference_notes`.
+    - After the fence, restate the scenario in at most two sentences, ask only \
+    "What would you clarify first?", and stop. Do not list examples such as \
+    traffic or scale, offline behavior, media types, consistency, latency, \
+    storage, caching, memory, battery, or API constraints.
+    - The candidate leads requirements discovery. Answer only the clarification \
+    they actually asked. Never answer unasked questions, complete their \
+    checklist, or batch several interviewer questions into one response.
+    - If an important dimension is still missing, ask at most one short, neutral \
+    follow-up after responding to the candidate. Do not name multiple missing \
+    dimensions or preview later design stages. Continue one question at a time \
+    through estimation, high-level design, and deep dives.
     """
 
   static let evalContract = """
@@ -390,8 +423,10 @@ public enum BuddyAgentInstructions {
       return """
         Persona: staff-level system design interviewer.
         - Present ONE design prompt (buddy-question fence, topics use sd-* \
-        slugs), then drive the classic loop: requirements clarification -> \
-        back-of-envelope estimation -> high-level design -> deep dives.
+        slugs), then assess the classic loop: requirements clarification -> \
+        back-of-envelope estimation -> high-level design -> deep dives. The \
+        candidate must discover and drive each stage rather than receiving its \
+        checklist from you.
         - A shared excalidraw whiteboard is available through MCP tools. Use \
         them to sketch boxes/arrows when it helps, or ask the candidate to \
         diagram and react to what they draw.
@@ -404,6 +439,8 @@ public enum BuddyAgentInstructions {
         - On [EVALUATE NOW] or [TIME UP]: grade with rubric dimensions: \
         requirements, api_design, data_modeling, scalability_tradeoffs, \
         communication; end with one buddy-eval fence.
+
+        \(systemDesignInterviewFlowPolicy)
         """
     case .behavioral:
       return """
@@ -588,7 +625,14 @@ public enum BuddyAgentInstructions {
       role = "You are a friendly coding tutor. Guide with questions, explain after attempts."
       rubric = "correctness, reasoning, complexity_analysis, communication"
     case .systemDesign:
-      role = "You are a system design interviewer. Requirements, estimation, high-level design, deep dives. Push on trade-offs."
+      role = """
+        You are a system design interviewer. Keep expected requirements private. \
+        The opening contains only the scenario, then ask exactly "What would you \
+        clarify first?" and stop. Never provide sample clarification questions, \
+        requirement categories, a design roadmap, or a checklist. Answer only \
+        what the candidate asks; use at most one neutral follow-up per turn. \
+        Continue one question at a time through estimation, design, and deep dives.
+        """
       rubric = "requirements, api_design, data_modeling, scalability_tradeoffs, communication"
     case .behavioral:
       role = "You are a behavioral interview coach. One STAR question at a time, probing follow-ups, then feedback."
@@ -623,6 +667,10 @@ public enum BuddyAgentInstructions {
       is the exercise). Never put Markdown fences, ```swift/``` tag lines, or a fully commented-out \
       source block in a workspace file. Preserve indentation; Swift uses spaces and exactly 2 spaces \
       per nesting level. Re-read the saved file and fix its formatting before handing it over.
+      - The `primary file` in <buddy-context> is the file shown in the editor. For requests to \
+      update or fix the current solution, inspect and edit that file in place; do not create a \
+      duplicate named after a type. Re-read it from disk before claiming success. Finished or \
+      evaluated sessions still have writable workspaces; edits never alter the recorded grade.
       - On [EVALUATE NOW] or [TIME UP], stop role-play and END with a ```buddy-eval fence: {"schema":"buddy-eval/v1","overall_score":0-100,"dimensions":[{"id":"...","score":0-10,"max":10}],"summary_markdown":"...","improvement_notes":[{"topic":"slug","note":"..."}]}
       - Evaluations assess demonstrated skills only. Never give a hire/no-hire recommendation.
       - Grade thinking, not typing: reasoning, communication, and knowledge. Grade the final \
@@ -660,6 +708,8 @@ public enum BuddyAgentInstructions {
   public enum AttemptPhase: String {
     case inProgress = "in_progress"
     case awaitingEvaluation = "awaiting_evaluation"
+    case evaluated
+    case abandoned
   }
 
   /// Builds the <buddy-context> hidden block appended to each outgoing message.
@@ -710,6 +760,7 @@ public enum BuddyAgentInstructions {
 
       if let workspacePath = attempt.workspacePath {
         lines.append("workspace: \(workspacePath)")
+        lines.append("primary file: \(WorkspaceStarterContent.fileName(for: question?.languageHint))")
       }
 
       sections.append("<buddy-context>\n\(lines.joined(separator: "\n"))\n</buddy-context>")
@@ -763,6 +814,28 @@ public enum BuddyAgentInstructions {
   public static let whiteboardRequestMessage = """
     [CREATE WHITEBOARD] Create the shared editable whiteboard now. Keep it \
     intentionally sparse so I can drive the design.
+    """
+
+  /// Appended to the system-design kickoff so the shared canvas exists from
+  /// turn one — the candidate can start diagramming while clarifying in chat,
+  /// instead of having to request the board separately.
+  public static let systemDesignKickoffWhiteboardDirective = """
+    [CREATE WHITEBOARD] In this same turn, after presenting the question, also \
+    create the shared editable whiteboard — only the problem title and a small \
+    empty requirements area, nothing else — so I can start diagramming \
+    immediately. Do not wait for my clarifications before creating it.
+    """
+
+  /// Sent by the whiteboard surface's review button (system design sessions).
+  /// The agent re-reads the shared canvas checkpoint — user edits are saved
+  /// back under the same checkpoint id — plus any workspace code, then coaches.
+  public static let whiteboardReviewRequestMessage = """
+    [REVIEW WHITEBOARD] I've updated the shared whiteboard — take a fresh look. \
+    Read the latest canvas state with the excalidraw read_checkpoint tool (the \
+    same checkpoint id from when you created the view), and also check any code \
+    or notes in my workspace files. Review my design like an interviewer: point \
+    out gaps, risks, and unstated assumptions, and ask one or two probing \
+    questions. Do not redraw or complete the design for me.
     """
 
   public static func studyPlanGenerationDirective(

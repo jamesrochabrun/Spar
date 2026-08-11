@@ -319,6 +319,14 @@ struct MCPAppResourceHostView: View {
     .onChange(of: resource.id) { _, _ in
       handleResourceChange()
     }
+    // The render item's id is the tool_use id, so the same view instance stays
+    // mounted from tool start through its result. Reinstall the handler when the
+    // invocation gains that result so the app receives the late `tool-result`
+    // (Excalidraw's checkpoint id rides in it — without it, user edits are
+    // never checkpointed back to the server).
+    .onChange(of: invocation) { _, _ in
+      installBridgeHandler()
+    }
     .onDisappear {
       consentController.cancelPending()
     }
@@ -993,6 +1001,7 @@ final class MCPAppHostBridgeHandler: AgentHubMCPUIBridgeHandler {
     AppLogger.mcp.info(
       "[MCPAppHost] model context update resource=\(self.resource.resource.uri, privacy: .public)"
     )
+    host?.noteMCPAppModelContext(resource: resource, params: params)
   }
 
   func appDidLogMessage(_ params: AgentHubMCPUIJSONValue?) {

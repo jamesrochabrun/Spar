@@ -9,8 +9,17 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same branch or PR supersedes any in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build-and-test:
+  # The two jobs run in parallel, so wall clock is max(app build, package
+  # tests) instead of their sum. Each caches its DerivedData/.build so
+  # dependency compilation (the bulk of a cold run) is reused across runs;
+  # checkout refreshes repo file mtimes, so only first-party targets rebuild.
+  build-app:
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -21,6 +30,14 @@ jobs:
         with:
           xcode-version: latest-stable
 
+      - name: Cache DerivedData
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: DerivedData
+          key: ${{ runner.os }}-app-deriveddata-${{ hashFiles('CodingBuddy.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-app-deriveddata-
+
       - name: Build app
         run: |
           xcodebuild \
@@ -28,22 +45,33 @@ jobs:
             -scheme CodingBuddy \
             -configuration Debug \
             -destination 'platform=macOS' \
+            -derivedDataPath DerivedData \
             -skipPackagePluginValidation \
             -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Build app tests
-        run: |
-          xcodebuild \
-            -project CodingBuddy.xcodeproj \
-            -scheme CodingBuddy \
-            -configuration Debug \
-            -destination 'generic/platform=macOS' \
-            -skipPackagePluginValidation \
-            -skipMacroValidation \
-            CODE_SIGNING_ALLOWED=NO \
-            build-for-testing
+  test-packages:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Cache package builds
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            Packages/CodingBuddyChat/DerivedData
+            Packages/InterviewKit/.build
+            Packages/BuddyMCPUI/.build
+          key: ${{ runner.os }}-packages-${{ hashFiles('Packages/**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-packages-
 
       - name: Test CodingBuddyChat package
         working-directory: Packages/CodingBuddyChat
@@ -51,6 +79,7 @@ jobs:
           xcodebuild \
             -scheme CodingBuddyChat \
             -destination 'platform=macOS' \
+            -derivedDataPath DerivedData \
             -skipPackagePluginValidation \
             -skipMacroValidation \
             test

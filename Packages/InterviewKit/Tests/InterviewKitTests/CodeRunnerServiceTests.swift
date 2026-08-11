@@ -142,6 +142,37 @@ struct ProcessCodeRunnerTests {
     guard let result = try await runIfToolAvailable(ProcessCodeRunner(), file) else { return }
     #expect(result.succeeded)
     #expect(result.standardOutput.contains("swift-ok"))
+    #expect(result.commandLine == "swiftc solution.swift && ./solution")
+  }
+
+  @Test
+  func compilesSwiftUIWithoutUsingTheInterpreterJIT() async throws {
+    let workspace = try makeWorkspace()
+    let file = try write(
+      """
+      import SwiftUI
+
+      struct SearchView: View {
+        @State private var query = ""
+
+        var body: some View {
+          Text(query)
+            .task(id: query) { }
+        }
+      }
+      """,
+      named: "solution.swift",
+      in: workspace
+    )
+
+    guard let result = try await runIfToolAvailable(ProcessCodeRunner(), file) else { return }
+    #expect(result.succeeded)
+    #expect(!result.standardError.contains("JIT session error"))
+    #expect(!result.standardError.contains("___isPlatformVersionAtLeast"))
+    #expect(
+      try FileManager.default.contentsOfDirectory(atPath: workspace.path).sorted()
+        == ["solution.swift"]
+    )
   }
 
   @Test

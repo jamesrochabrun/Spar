@@ -52,6 +52,55 @@ struct MCPAppSessionServiceTests {
   }
 
   @Test
+  func modelContextTextExtractsContentBlocksAndBareText() {
+    // MCP Apps shape: {content:[{type:"text",text}]}.
+    let blocks = MCPAppSessionService.modelContextText(from: .object([
+      "content": .array([
+        .object(["type": .string("text"), "text": .string("user added 2 rectangles")]),
+        .object(["type": .string("text"), "text": .string("user moved title")])
+      ])
+    ]))
+    #expect(blocks == "user added 2 rectangles\nuser moved title")
+
+    // Bare {text} fallback.
+    let bare = MCPAppSessionService.modelContextText(from: .object(["text": .string("edited")]))
+    #expect(bare == "edited")
+
+    #expect(MCPAppSessionService.modelContextText(from: nil) == nil)
+    #expect(MCPAppSessionService.modelContextText(from: .object([:])) == nil)
+  }
+
+  @Test
+  func modelContextIsStoredPerResourceAndConsumedOnce() {
+    let service = MCPAppSessionService(discoveryService: NoOpDiscoveryService())
+    let resource = MCPAppResource(
+      provider: .claude,
+      projectPath: "/tmp/ws",
+      serverName: "excalidraw",
+      source: .liveDiscovery,
+      resource: AgentHubMCPUIResource(uri: "ui://excalidraw/mcp-app.html", text: "<main/>")
+    )
+    let item = MCPAppRenderItem(
+      resource: resource,
+      invocation: MCPAppInvocation(id: "call-1", serverName: "excalidraw", toolName: "create_view")
+    )
+
+    service.noteMCPAppModelContext(resource: resource, params: .object([
+      "content": .array([.object(["type": .string("text"), "text": .string("user drew a box")])])
+    ]))
+    #expect(service.modelContextTextByResourceID[resource.id] == "user drew a box")
+
+    // Duplicate items sharing the resource yield the text once, and reading consumes it.
+    let texts = service.consumeModelContextTexts(for: [item, item])
+    #expect(texts == ["user drew a box"])
+    #expect(service.consumeModelContextTexts(for: [item]).isEmpty)
+
+    // Empty payloads never overwrite or store.
+    service.noteMCPAppModelContext(resource: resource, params: .object([:]))
+    #expect(service.modelContextTextByResourceID[resource.id] == nil)
+  }
+
+  @Test
   func codexInvocationRoundTripProducesRenderableCapture() {
     let service = MCPAppSessionService(discoveryService: NoOpDiscoveryService())
 

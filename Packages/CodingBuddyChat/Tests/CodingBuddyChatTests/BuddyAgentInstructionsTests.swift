@@ -71,6 +71,9 @@ struct BuddyAgentInstructionsTests {
         #expect(prompt.contains("commented-out") || prompt.contains("comment out"))
         #expect(prompt.contains("indentation"))
         #expect(prompt.contains("2 spaces"))
+        #expect(prompt.contains("primary file"))
+        #expect(prompt.contains("edit") && prompt.contains("in place"))
+        #expect(prompt.contains("evaluated") && prompt.contains("writable"))
       }
     }
   }
@@ -299,6 +302,30 @@ struct BuddyAgentInstructionsTests {
   }
 
   @Test
+  func systemDesignKickoffDirectiveCreatesTheBoardWithoutBlockingOnClarification() {
+    let directive = BuddyAgentInstructions.systemDesignKickoffWhiteboardDirective
+    #expect(directive.contains("[CREATE WHITEBOARD]"))
+    // Sparse board, created in the same turn as the question.
+    #expect(directive.contains("requirements area"))
+    #expect(directive.contains("Do not wait for my clarifications"))
+  }
+
+  @Test
+  func systemDesignOpeningKeepsClarificationCandidateLedForEveryProvider() {
+    let prefixes = BuddyAgentInstructions.prefixes(for: .systemDesign, specialization: .iOS)
+
+    for prompt in [prefixes.claude, prefixes.codex, prefixes.api] {
+      #expect(prompt.contains("What would you clarify first?"))
+      #expect(prompt.contains("sample clarification questions"))
+      #expect(prompt.contains("one") && prompt.contains("at a time"))
+      #expect(prompt.contains("Keep expected requirements private") ||
+              prompt.contains("Keep expected discoveries and answers"))
+      #expect(prompt.contains("Do not include an interview roadmap") ||
+              prompt.contains("Never provide") && prompt.contains("design roadmap"))
+    }
+  }
+
+  @Test
   func hiddenContextCarriesTimerHintsAndWorkspace() {
     let attempt = InterviewAttempt(
       provider: "claude",
@@ -332,6 +359,37 @@ struct BuddyAgentInstructionsTests {
     #expect(context.contains("timer: 21:34 remaining of 35:00"))
     #expect(context.contains("hints: 1 used of 3"))
     #expect(context.contains("workspace: /Users/x/Documents/CodingBuddy/Workspaces/2026-07-31-longest-substring"))
+    #expect(context.contains("primary file: solution.swift"))
+  }
+
+  @Test
+  func evaluatedContextKeepsWorkspaceIdentityWithoutPretendingTheAttemptIsLive() {
+    let attempt = InterviewAttempt(
+      provider: "claude",
+      mode: .practice,
+      status: .evaluated,
+      workspacePath: "/Users/x/Documents/CodingBuddy/Workspaces/finished"
+    )
+    let question = Question(
+      mode: .practice,
+      title: "Search",
+      promptMarkdown: "…",
+      difficulty: .medium,
+      languageHint: "python"
+    )
+
+    let context = BuddyAgentInstructions.appendingHiddenContext(
+      nil,
+      attempt: attempt,
+      question: question,
+      timerRemaining: nil,
+      phase: .evaluated
+    )
+
+    #expect(context.contains("phase: evaluated"))
+    #expect(context.contains("workspace: /Users/x/Documents/CodingBuddy/Workspaces/finished"))
+    #expect(context.contains("primary file: solution.py"))
+    #expect(!context.contains("timer:"))
   }
 
   @Test
