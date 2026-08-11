@@ -87,7 +87,7 @@ public struct MCPAppResource: Identifiable, Sendable, Equatable {
 /// are pushed to the rendered app via `ui/notifications/tool-input` and
 /// `ui/notifications/tool-result` so it draws — neither requires the app shell
 /// to be embedded in the transcript (Claude Code never embeds it).
-public struct MCPAppInvocation: Identifiable, Sendable, Equatable {
+public struct MCPAppInvocation: Identifiable, Codable, Sendable, Equatable {
   /// The tool_use id — unique per invocation.
   public let id: String
   public let serverName: String

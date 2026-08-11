@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CodingBuddyKit
 import CCTerminalServiceInterface
 import PierreDiffsSwift
 
@@ -35,7 +36,7 @@ struct ChatMessageView: View {
     terminalService: TerminalService,
     fontSize: Double = 13.0,
     viewModel: ChatViewModel,
-    assistantName: String = "Buddy",
+    assistantName: String = AppBrand.name,
     showArtifact: ((Artifact) -> Void)? = nil)
   {
     self.message = message

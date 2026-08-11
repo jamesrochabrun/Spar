@@ -1,6 +1,6 @@
 //
 //  MainContentView.swift
-//  CodingBuddy
+//  Spar
 //
 
 import BuddyMCPApps
@@ -355,7 +355,7 @@ struct MainContentView: View {
           .frame(height: 1)
       }
 
-      // Same ZStack + opacity/hit-testing switching as Easel's canvas panel:
+      // Same ZStack + opacity/hit-testing switching as Spar's canvas panel:
       // surfaces stay alive (editor buffers, whiteboard web view) while hidden.
       ZStack {
         if availableSurfaces.contains(.lesson) {
@@ -483,7 +483,7 @@ struct MainContentView: View {
         ContentUnavailableView {
           Label("Whiteboard", systemImage: "rectangle.3.group")
         } description: {
-          Text("When Buddy draws on the shared whiteboard (via an MCP app like excalidraw), the diagram renders here.")
+          Text("When \(AppBrand.name) draws on the shared whiteboard (via an MCP app like excalidraw), the diagram renders here.")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(EaselDesignSystem.Palette.canvas(for: colorScheme))

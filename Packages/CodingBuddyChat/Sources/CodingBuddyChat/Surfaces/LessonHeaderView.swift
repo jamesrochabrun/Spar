@@ -33,7 +33,7 @@ struct LessonHeaderView: View {
         if isLoading {
           HStack(spacing: 6) {
             ProgressView().controlSize(.small)
-            Text("Buddy is responding…")
+            Text("\(AppBrand.name) is responding…")
               .font(.caption)
               .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
           }

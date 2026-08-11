@@ -256,7 +256,7 @@ public struct SessionReportView: View {
   private var emptyStateMessage: String {
     switch attempt?.status {
     case .awaitingEvaluation:
-      return "Buddy is grading the session — the report appears here when it lands."
+      return "\(AppBrand.name) is grading the session — the report appears here when it lands."
     case .inProgress:
       return "Finish the session (or hit End & Grade) to get your rubric report."
     default:

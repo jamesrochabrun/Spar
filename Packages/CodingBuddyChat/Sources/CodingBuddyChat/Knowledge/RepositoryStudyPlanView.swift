@@ -1,3 +1,4 @@
+import CodingBuddyKit
 import KnowledgeKit
 import SwiftUI
 
@@ -31,7 +32,7 @@ struct RepositoryStudyPlanView: View {
           Label("No Learning Plan Yet", systemImage: "checklist")
         } description: {
           Text(
-            "Buddy has inspected this repository and can turn its architecture, features, and tests into a structured checklist."
+            "\(AppBrand.name) has inspected this repository and can turn its architecture, features, and tests into a structured checklist."
           )
         } actions: {
           Button("Create Learning Plan", systemImage: "sparkles", action: createLearningPlan)
@@ -97,9 +98,9 @@ struct RepositoryStudyPlanView: View {
 
   private func nextActionDescription(for plan: StudyPlan) -> String {
     if plan.nextIncompleteItem == nil {
-      return "Buddy sets one task at a time in the Lesson panel. Your completed checkmarks stay saved."
+      return "\(AppBrand.name) sets one task at a time in the Lesson panel. Your completed checkmarks stay saved."
     }
-    return "Buddy opens a source and sets one task at a time in the Lesson panel — or pick any item below."
+    return "\(AppBrand.name) opens a source and sets one task at a time in the Lesson panel — or pick any item below."
   }
 
   private func createLearningPlan() {

@@ -5,8 +5,9 @@
 //  Created by Claude on 2025.
 //
 
-import Foundation
 import ClaudeCodeSDK
+import CodingBuddyKit
+import Foundation
 
 /// Detailed error information for display to users
 public struct ErrorInfo: Identifiable, Equatable {
@@ -238,7 +239,7 @@ extension ErrorInfo {
                 (errorMessage.contains("unknown variant") && errorMessage.contains("xhigh")) {
       suggestion = "Codex config contains an unsupported reasoning effort. Use none, low, medium, or high."
     } else if errorMessage.contains("disable_mouse_capture") {
-      suggestion = "Codex config contains TUI settings that require disable_mouse_capture. Easel will normalize this for Codex runs."
+      suggestion = "Codex config contains TUI settings that require disable_mouse_capture. \(AppBrand.name) will normalize this for Codex runs."
     } else {
       suggestion = "Check your connection and assistant service status."
     }

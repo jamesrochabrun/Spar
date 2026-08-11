@@ -221,7 +221,7 @@ public struct HintsView: View {
     if attempt == nil {
       return "Start a session from the sidebar to get a question."
     }
-    return "Buddy presents the question in chat — it lands here automatically."
+    return "\(AppBrand.name) presents the question in chat — it lands here automatically."
   }
 
   @ViewBuilder

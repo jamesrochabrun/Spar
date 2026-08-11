@@ -5,6 +5,7 @@
 //  Created by Assistant on 6/29/2025.
 //
 
+import CodingBuddyKit
 import SwiftUI
 
 struct LoadingIndicator: View {
@@ -30,7 +31,7 @@ struct LoadingIndicator: View {
     costUSD: Double = 0.0,
     showPrice: Bool? = nil,
     showTokenCount: Bool = true,
-    activityText: String = "Easel is working"
+    activityText: String = "\(AppBrand.name) is working"
   ) {
     self.startTime = startTime
     self.inputTokens = inputTokens

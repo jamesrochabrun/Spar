@@ -187,7 +187,7 @@ public struct NewSessionSheet: View {
   private var groundedQuestionNote: some View {
     Label {
       Text(
-        "Questions are drawn from “\(selectedStudySpace?.name ?? "your sources")” — Buddy asks about the repository's real code and design."
+        "Questions are drawn from “\(selectedStudySpace?.name ?? "your sources")” — \(AppBrand.name) asks about the repository's real code and design."
       )
       .font(.callout)
       .foregroundStyle(.secondary)
@@ -371,7 +371,7 @@ public struct NewSessionSheet: View {
 
   private var topicSection: some View {
     VStack(alignment: .leading, spacing: 8) {
-      sectionTitle("Topics (optional — Buddy picks when empty)")
+      sectionTitle("Topics (optional — \(AppBrand.name) picks when empty)")
       FlowLayout(spacing: 6) {
         ForEach(visibleTopics) { topic in
           topicChip(topic)

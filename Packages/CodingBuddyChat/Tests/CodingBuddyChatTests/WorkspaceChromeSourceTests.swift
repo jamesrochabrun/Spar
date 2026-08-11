@@ -38,7 +38,8 @@ struct WorkspaceChromeSourceTests {
       "Sources/CodingBuddyChat/Sidebar/SidebarSessionRow.swift"
     )
 
-    #expect(source.contains("Label(row.mode.displayName, systemImage: row.mode.systemImage)"))
+    #expect(source.contains("SidebarSessionModeIcon(mode: row.mode)"))
+    #expect(source.contains("Text(row.mode.displayName.uppercased())"))
     #expect(source.contains("Open \\(row.mode.displayName) session"))
   }
 

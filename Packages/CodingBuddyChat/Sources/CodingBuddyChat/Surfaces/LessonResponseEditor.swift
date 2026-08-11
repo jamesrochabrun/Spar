@@ -90,7 +90,7 @@ struct LessonResponseEditor: View {
           .buttonStyle(.bordered)
           .controlSize(.small)
           .disabled(isLoading)
-          .help("Buddy narrows this task without giving you the answer")
+          .help("\(AppBrand.name) narrows this task without giving you the answer")
 
         Spacer()
 

@@ -26,7 +26,7 @@ struct GradingReportProgressView: View {
           .font(.title3)
           .bold()
 
-        Text("Buddy is grading your solution against the session rubric. The report will appear here automatically.")
+        Text("\(AppBrand.name) is grading your solution against the session rubric. The report will appear here automatically.")
           .font(.callout)
           .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
           .multilineTextAlignment(.center)

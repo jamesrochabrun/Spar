@@ -13,8 +13,8 @@ struct SystemDesignOnboardingSourceTests {
     #expect(!source.contains("\"Focus Chat\""))
     #expect(source.contains("\"Create Whiteboard\""))
     #expect(source.contains("ProgressView"))
-    #expect(source.contains("Buddy is setting up the whiteboard"))
-    #expect(source.contains("Wait for Buddy to finish responding"))
+    #expect(source.contains("AppBrand.name) is setting up the whiteboard"))
+    #expect(source.contains("Wait for \\(AppBrand.name) to finish responding"))
     #expect(!source.contains("static let phases"))
     #expect(!source.contains("users, scale, consistency"))
   }

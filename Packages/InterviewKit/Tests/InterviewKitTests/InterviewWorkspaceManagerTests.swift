@@ -4,6 +4,14 @@ import Testing
 
 struct InterviewWorkspaceManagerTests {
   @Test
+  func unmanagedWorkspaceErrorUsesSparBranding() {
+    let message = InterviewWorkspaceError.unmanagedPath("/tmp/outside").errorDescription
+
+    #expect(message?.contains("Spar") == true)
+    #expect(message?.contains("CodingBuddy") == false)
+  }
+
+  @Test
   func deletesWorkspaceInsideManagedRoot() throws {
     let root = temporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }

@@ -3,6 +3,7 @@
 //  CodingBuddyChat
 //
 
+import CodingBuddyKit
 import SwiftUI
 
 /// Before the first fence arrives. The loading copy names the repository so a
@@ -33,8 +34,8 @@ struct LessonEmptyStateView: View {
       return "Open Learning Library and start an item — its task, source, and response land here."
     }
     guard let studySpaceName else {
-      return "Buddy is building your next task."
+      return "\(AppBrand.name) is building your next task."
     }
-    return "Buddy is reading \(studySpaceName) to build your next task."
+    return "\(AppBrand.name) is reading \(studySpaceName) to build your next task."
   }
 }

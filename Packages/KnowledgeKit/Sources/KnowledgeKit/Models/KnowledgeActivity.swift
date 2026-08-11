@@ -25,7 +25,7 @@ public enum KnowledgeActivity: String, Codable, CaseIterable, Identifiable, Send
     case .learn:
       return "Ask questions, request explanations, and explore with citations."
     case .interview:
-      return "Let Buddy lead, probe your understanding, and grade the attempt."
+      return "Let Spar lead, probe your understanding, and grade the attempt."
     }
   }
 }
