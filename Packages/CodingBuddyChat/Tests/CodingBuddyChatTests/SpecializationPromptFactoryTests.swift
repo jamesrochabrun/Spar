@@ -61,9 +61,14 @@ struct SpecializationPromptFactoryTests {
   @Test
   func iOSSystemDesignIsMobileClientFlavored() {
     let full = SpecializationPromptFactory.sessionGuidance(.iOS, mode: .systemDesign)
+    let compact = SpecializationPromptFactory.compactGuidance(.iOS, mode: .systemDesign)
     #expect(full.contains("offline"))
     #expect(full.contains("sd-offline-sync"))
     #expect(full.contains("client architecture"))
+    #expect(full.contains("private interviewer notes"))
+    #expect(full.contains("probe one missing area at a time"))
+    #expect(compact.contains("never list sample clarification questions"))
+    #expect(!full.contains("requirements (offline? scale? media?)"))
   }
 
   @Test

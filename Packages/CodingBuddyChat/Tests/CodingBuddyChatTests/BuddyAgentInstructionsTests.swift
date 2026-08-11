@@ -302,6 +302,21 @@ struct BuddyAgentInstructionsTests {
   }
 
   @Test
+  func systemDesignOpeningKeepsClarificationCandidateLedForEveryProvider() {
+    let prefixes = BuddyAgentInstructions.prefixes(for: .systemDesign, specialization: .iOS)
+
+    for prompt in [prefixes.claude, prefixes.codex, prefixes.api] {
+      #expect(prompt.contains("What would you clarify first?"))
+      #expect(prompt.contains("sample clarification questions"))
+      #expect(prompt.contains("one") && prompt.contains("at a time"))
+      #expect(prompt.contains("Keep expected requirements private") ||
+              prompt.contains("Keep expected discoveries and answers"))
+      #expect(prompt.contains("Do not include an interview roadmap") ||
+              prompt.contains("Never provide") && prompt.contains("design roadmap"))
+    }
+  }
+
+  @Test
   func hiddenContextCarriesTimerHintsAndWorkspace() {
     let attempt = InterviewAttempt(
       provider: "claude",

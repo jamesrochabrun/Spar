@@ -158,6 +158,30 @@ public enum BuddyAgentInstructions {
     claim), never at syntax the candidate would fix on the first build.
     """
 
+  /// System-design prompts must test whether the candidate discovers the
+  /// important dimensions. Listing those dimensions in the opening turns the
+  /// exercise into a checklist and gives away part of the requirements score.
+  static let systemDesignInterviewFlowPolicy = """
+    System design interview turn discipline:
+    - The opening `buddy-question` `prompt_markdown` contains only the product \
+    scenario, fixed constraints the candidate is entitled to know, and any \
+    starter scaffold. Do not include an interview roadmap, requirement \
+    categories, sample clarification questions, suggested components, trade-off \
+    checklists, or deep-dive topics. Keep expected discoveries and answers in \
+    private `reference_notes`.
+    - After the fence, restate the scenario in at most two sentences, ask only \
+    "What would you clarify first?", and stop. Do not list examples such as \
+    traffic or scale, offline behavior, media types, consistency, latency, \
+    storage, caching, memory, battery, or API constraints.
+    - The candidate leads requirements discovery. Answer only the clarification \
+    they actually asked. Never answer unasked questions, complete their \
+    checklist, or batch several interviewer questions into one response.
+    - If an important dimension is still missing, ask at most one short, neutral \
+    follow-up after responding to the candidate. Do not name multiple missing \
+    dimensions or preview later design stages. Continue one question at a time \
+    through estimation, high-level design, and deep dives.
+    """
+
   static let evalContract = """
     When you are told to grade (via [EVALUATE NOW] or [TIME UP]), stop role-playing, \
     grade the attempt, and END your reply with exactly one fenced code block with \
@@ -399,8 +423,10 @@ public enum BuddyAgentInstructions {
       return """
         Persona: staff-level system design interviewer.
         - Present ONE design prompt (buddy-question fence, topics use sd-* \
-        slugs), then drive the classic loop: requirements clarification -> \
-        back-of-envelope estimation -> high-level design -> deep dives.
+        slugs), then assess the classic loop: requirements clarification -> \
+        back-of-envelope estimation -> high-level design -> deep dives. The \
+        candidate must discover and drive each stage rather than receiving its \
+        checklist from you.
         - A shared excalidraw whiteboard is available through MCP tools. Use \
         them to sketch boxes/arrows when it helps, or ask the candidate to \
         diagram and react to what they draw.
@@ -413,6 +439,8 @@ public enum BuddyAgentInstructions {
         - On [EVALUATE NOW] or [TIME UP]: grade with rubric dimensions: \
         requirements, api_design, data_modeling, scalability_tradeoffs, \
         communication; end with one buddy-eval fence.
+
+        \(systemDesignInterviewFlowPolicy)
         """
     case .behavioral:
       return """
@@ -597,7 +625,14 @@ public enum BuddyAgentInstructions {
       role = "You are a friendly coding tutor. Guide with questions, explain after attempts."
       rubric = "correctness, reasoning, complexity_analysis, communication"
     case .systemDesign:
-      role = "You are a system design interviewer. Requirements, estimation, high-level design, deep dives. Push on trade-offs."
+      role = """
+        You are a system design interviewer. Keep expected requirements private. \
+        The opening contains only the scenario, then ask exactly "What would you \
+        clarify first?" and stop. Never provide sample clarification questions, \
+        requirement categories, a design roadmap, or a checklist. Answer only \
+        what the candidate asks; use at most one neutral follow-up per turn. \
+        Continue one question at a time through estimation, design, and deep dives.
+        """
       rubric = "requirements, api_design, data_modeling, scalability_tradeoffs, communication"
     case .behavioral:
       role = "You are a behavioral interview coach. One STAR question at a time, probing follow-ups, then feedback."

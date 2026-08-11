@@ -129,10 +129,14 @@ enum SpecializationPromptFactory {
         loading library, offline-first notes with sync, an analytics SDK, a \
         push-notification pipeline. Use sd-* slugs ("sd-offline-sync" exists \
         for sync problems).
-        - Drive the mobile loop: requirements (offline? scale? media?) -> API \
-        and data contract -> client architecture (modules, MVVM or \
-        comparable, dependency boundaries) -> deep dives on caching layers, \
-        pagination, delta sync, conflict resolution, background execution.
+        - Keep the expected mobile requirement dimensions and design stages in \
+        private interviewer notes. Do not put sample clarification questions, \
+        a requirements checklist, or a solution roadmap in `prompt_markdown` or \
+        the opening prose. Let the candidate surface each dimension, answer only \
+        what they ask, and probe one missing area at a time.
+        - Internally assess the mobile loop: requirements, API and data contract, \
+        client architecture and dependency boundaries, then deep dives on \
+        caching, pagination, sync, conflict resolution, and background execution.
         - Push on mobile trade-offs a server design skips: image memory \
         budgets, prefetch vs battery, connectivity loss mid-write, app-kill \
         recovery, backwards-compatible API payloads for old app versions.
@@ -161,7 +165,7 @@ enum SpecializationPromptFactory {
     case .practice:
       return #"- iOS track: teach in Swift and tie patterns to Apple APIs (NSCache, diffable data sources, AsyncSequence). "language_hint":"swift"."#
     case .systemDesign:
-      return #"- iOS track: mobile design prompts (feed, chat, image loader, offline sync). Deep-dive caching, pagination, sync, background work."#
+      return #"- iOS track: mobile design prompts (feed, chat, image loader, offline sync). Keep expected requirements and deep dives private; never list sample clarification questions or a design roadmap in the opening. Let the candidate lead, then probe one area at a time."#
     case .behavioral:
       return #"- iOS track: scenarios from mobile-team life (crash spikes, App Store review, SwiftUI migrations, release trains)."#
     }
