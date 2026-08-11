@@ -837,7 +837,7 @@ final class MCPAppHostBridgeHandler: AgentHubMCPUIBridgeHandler {
       "[MCPAppHost] initialize resource=\(self.resource.resource.uri, privacy: .public) server=\(self.resource.serverName, privacy: .public) source=\(self.resource.source.rawValue, privacy: .public) protocol=\(protocolVersion, privacy: .public)"
     )
     let hostInfo: AgentHubMCPUIJSONValue = .object([
-      "name": .string("CodingBuddy"),
+      "name": .string("Spar"),
       "version": .string("1.0.0")
     ])
     let hostCapabilities = hostCapabilitiesValue()
@@ -1058,7 +1058,7 @@ final class MCPAppHostBridgeHandler: AgentHubMCPUIBridgeHandler {
       "displayMode": .string("inline"),
       "availableDisplayModes": .array([.string("inline"), .string("fullscreen")]),
       "platform": .string("desktop"),
-      "userAgent": .string("CodingBuddy/1.0.0")
+      "userAgent": .string("Spar/1.0.0")
     ])
   }
 

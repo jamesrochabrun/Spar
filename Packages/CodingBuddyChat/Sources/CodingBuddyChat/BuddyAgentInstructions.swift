@@ -40,7 +40,7 @@ public enum BuddyAgentInstructions {
     - After the fence, restate the problem conversationally.
     """
 
-  /// Buddy owns the mechanical code; the candidate owns the thinking. This is
+  /// Spar owns the mechanical code; the candidate owns the thinking. This is
   /// the counterpart to the grading philosophy: the session is only worth the
   /// candidate's time if it spends that time on reasoning, not on typing what
   /// a template or a search result would supply for free.
@@ -69,7 +69,7 @@ public enum BuddyAgentInstructions {
     the interesting question is how you handle a duplicate key."
     """
 
-  /// The learner can deliberately leave tutoring mode and ask Buddy to do the
+  /// The learner can deliberately leave tutoring mode and ask Spar to do the
   /// implementation. This must remain provider-neutral because a session may
   /// run through Claude, Codex, or a local/API model.
   static let explicitSolutionPolicy = """
@@ -316,7 +316,7 @@ public enum BuddyAgentInstructions {
     """
 
   static let environmentBase = """
-    You are Buddy, the agent inside \(AppBrand.name), a macOS interview-prep app.
+    You are \(AppBrand.name), the AI interviewer and coach in this macOS interview-prep app.
 
     Hard environment constraints:
     - A <buddy-context> block in the hidden context of each message carries the \

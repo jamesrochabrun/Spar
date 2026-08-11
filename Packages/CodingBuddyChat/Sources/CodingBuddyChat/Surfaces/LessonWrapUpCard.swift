@@ -51,7 +51,7 @@ struct LessonWrapUpCard: View {
 
   private var message: String {
     isItemComplete
-      ? "Buddy thinks you've met this item's outcome. The checkmark is yours to give — mark it when you agree."
-      : "Buddy ended this turn without a new task. Mark the item complete, or move on and come back to it."
+      ? "\(AppBrand.name) thinks you've met this item's outcome. The checkmark is yours to give — mark it when you agree."
+      : "\(AppBrand.name) ended this turn without a new task. Mark the item complete, or move on and come back to it."
   }
 }

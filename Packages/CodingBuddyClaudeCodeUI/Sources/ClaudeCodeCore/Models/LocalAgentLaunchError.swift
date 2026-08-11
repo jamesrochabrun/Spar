@@ -3,6 +3,7 @@
 //  ClaudeCodeUI
 //
 
+import CodingBuddyKit
 import Foundation
 
 public enum LocalAgentLaunchError: LocalizedError, Equatable {
@@ -15,7 +16,7 @@ public enum LocalAgentLaunchError: LocalizedError, Equatable {
   public var errorDescription: String? {
     switch self {
     case .missingWorkingDirectory:
-      return "Select an Easel project before starting an agent."
+      return "Select a \(AppBrand.name) project before starting an agent."
     case .executableNotFound(let command):
       return "Could not find '\(command)' command."
     case .invalidShellValue(let valueName):

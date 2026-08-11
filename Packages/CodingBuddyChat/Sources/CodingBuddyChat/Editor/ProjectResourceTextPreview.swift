@@ -3,6 +3,7 @@
 //  CodingBuddyChat
 //
 
+import CodingBuddyKit
 import SwiftUI
 
 struct ProjectResourceTextPreview: View {
@@ -15,7 +16,7 @@ struct ProjectResourceTextPreview: View {
   let onEditorTextChange: (String) -> Void
   /// When set, a Run button appears that saves and runs the current buffer.
   let onRun: ((String) -> Void)?
-  /// When set, a Review button appears that saves the buffer and asks Buddy
+  /// When set, a Review button appears that saves the buffer and asks Spar
   /// for a coaching review (locate failures, never reveal the solution).
   let onReview: ((String) -> Void)?
 
@@ -139,7 +140,7 @@ struct ProjectResourceTextPreview: View {
         .buttonStyle(.borderedProminent)
         .controlSize(.small)
         .disabled(isSaving)
-        .help("Save and ask Buddy to review — points at what fails and how to tackle it, never the answer (⇧⌘E)")
+        .help("Save and ask \(AppBrand.name) to review — points at what fails and how to tackle it, never the answer (⇧⌘E)")
       }
     }
     .frame(height: 32)

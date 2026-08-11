@@ -7,7 +7,7 @@ import CodingBuddyKit
 import SwiftUI
 
 /// Transient placeholder before the shared MCP whiteboard exists. The session
-/// kickoff asks Buddy to create the canvas in its first turn, so this normally
+/// kickoff asks Spar to create the canvas in its first turn, so this normally
 /// just shows setup progress; the manual create button is the fallback for
 /// sessions where that didn't happen (e.g. restored older sessions).
 public struct SystemDesignWhiteboardEmptyView: View {
@@ -32,7 +32,7 @@ public struct SystemDesignWhiteboardEmptyView: View {
       Label("Shared whiteboard", systemImage: "rectangle.3.group")
     } description: {
       Text(
-        "Buddy sets up an editable canvas at the start of the session — start diagramming as soon as it appears."
+        "\(AppBrand.name) sets up an editable canvas at the start of the session — start diagramming as soon as it appears."
       )
     } actions: {
       VStack(spacing: 12) {
@@ -40,7 +40,7 @@ public struct SystemDesignWhiteboardEmptyView: View {
           HStack(spacing: 8) {
             ProgressView()
               .controlSize(.small)
-            Text("Buddy is setting up the whiteboard…")
+            Text("\(AppBrand.name) is setting up the whiteboard…")
           }
           .foregroundStyle(.secondary)
           .accessibilityElement(children: .combine)
@@ -54,7 +54,7 @@ public struct SystemDesignWhiteboardEmptyView: View {
           .disabled(!canCreateWhiteboard)
 
           if !canCreateWhiteboard {
-            Text("Wait for Buddy to finish responding before creating the canvas.")
+            Text("Wait for \(AppBrand.name) to finish responding before creating the canvas.")
               .font(.callout)
               .foregroundStyle(.secondary)
           }

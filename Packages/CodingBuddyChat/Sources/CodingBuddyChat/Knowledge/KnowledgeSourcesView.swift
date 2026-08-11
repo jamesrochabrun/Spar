@@ -3,7 +3,7 @@ import KnowledgeKit
 import SwiftUI
 
 /// Right-panel surface for a source-grounded session: search/browse the study
-/// space's indexed passages, inspect exactly what Buddy retrieved for its last
+/// space's indexed passages, inspect exactly what Spar retrieved for its last
 /// turn, and preview any passage in a read-only editor.
 public struct KnowledgeSourcesView: View {
   @Bindable private var library: KnowledgeLibraryService
@@ -23,7 +23,7 @@ public struct KnowledgeSourcesView: View {
     var displayName: String {
       switch self {
       case .library: return "Library"
-      case .retrieved: return "Sent to Buddy"
+      case .retrieved: return "Sent to \(AppBrand.name)"
       }
     }
   }
@@ -209,7 +209,7 @@ public struct KnowledgeSourcesView: View {
         ContentUnavailableView {
           Label("No Retrieval Yet", systemImage: "arrow.up.doc")
         } description: {
-          Text("When you send a message, the passages Buddy receives as grounding context appear here.")
+          Text("When you send a message, the passages \(AppBrand.name) receives as grounding context appear here.")
         }
       } else {
         VStack(alignment: .leading, spacing: 0) {
@@ -396,7 +396,7 @@ private struct KnowledgeChunkPreview: View {
         ContentUnavailableView {
           Label("Select a Passage", systemImage: "doc.text.magnifyingglass")
         } description: {
-          Text("Choose a search result to inspect the exact source Buddy can cite.")
+          Text("Choose a search result to inspect the exact source \(AppBrand.name) can cite.")
         }
       }
     }

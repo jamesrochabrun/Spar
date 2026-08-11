@@ -5,13 +5,31 @@
 //  Created by James Rochabrun on 3/22/26.
 //
 
+import Foundation
 import Testing
 @testable import CodingBuddy
 
 struct CodingBuddyTests {
+  @Test
+  func visibleAppBrandingUsesSpar() throws {
+    let workspace = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let relativePaths = [
+      "CodingBuddy/CapsuleInputView.swift",
+      "CodingBuddy/MainContentView.swift",
+    ]
 
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
+    for relativePath in relativePaths {
+      let source = try String(
+        contentsOf: workspace.appendingPathComponent(relativePath),
+        encoding: .utf8
+      )
+      #expect(source.contains("AppBrand.name"))
+      #expect(source.range(
+        of: #"\b(Buddy|Easel|CodingBuddy)\b"#,
+        options: .regularExpression
+      ) == nil)
     }
-
+  }
 }

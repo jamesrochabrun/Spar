@@ -5,7 +5,7 @@
 //  Workspace surface: the editor IS the surface. A solution file is created
 //  automatically in the attempt workspace and seeded with the problem
 //  statement as a comment header, so you read and solve in one place. A file
-//  menu appears only when the workspace grows past one file (e.g. Buddy wrote
+//  menu appears only when the workspace grows past one file (e.g. Spar wrote
 //  test files).
 //
 
@@ -346,7 +346,7 @@ public struct WorkspaceEditorView: View {
       didSeed = true
     }
 
-    // Prefer the solution file; fall back to the first file. If Buddy wrote to
+    // Prefer the solution file; fall back to the first file. If Spar wrote to
     // the already-open file, adopt that disk content only while the candidate
     // has no unsaved edits in the visible editor.
     let preferred = files.first { $0.url == starterURL } ?? files.first

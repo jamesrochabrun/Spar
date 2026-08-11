@@ -63,6 +63,28 @@ struct AgentHubMCPUIResourceTests {
     #expect(script.contains("forwardToNative(event.data)"))
     #expect(script.contains("event.origin === hostOrigin"))
   }
+
+  @Test("Host client metadata uses Spar branding")
+  func hostClientMetadataUsesSparBranding() throws {
+    let source = try sourceContents(
+      "Sources/BuddyMCPApps/MCPAppSidePanelView.swift"
+    )
+
+    #expect(source.contains(#""name": .string("Spar")"#))
+    #expect(source.contains(#""userAgent": .string("Spar/1.0.0")"#))
+    #expect(!source.contains(#".string("CodingBuddy")"#))
+  }
+
+  private func sourceContents(_ relativePath: String) throws -> String {
+    let testsDirectory = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let packageDirectory = testsDirectory.deletingLastPathComponent()
+    return try String(
+      contentsOf: packageDirectory.appendingPathComponent(relativePath),
+      encoding: .utf8
+    )
+  }
 }
 
 /// An MCP app's declared CSP domains come from the same untrusted tool output as

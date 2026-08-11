@@ -1,3 +1,4 @@
+import CodingBuddyKit
 import KnowledgeKit
 import SwiftUI
 
@@ -48,7 +49,7 @@ struct StudyPlanItemRow: View {
       Button("Start", systemImage: "play.fill", action: onStudy)
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .help("Open item \(number) in the Lesson panel — Buddy sets the first task")
+        .help("Open item \(number) in the Lesson panel — \(AppBrand.name) sets the first task")
     }
     .padding(.vertical, 4)
   }

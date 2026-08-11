@@ -1,6 +1,6 @@
 //
 //  CapsuleInputView.swift
-//  CodingBuddy
+//  Spar
 //
 
 import CodingBuddyKit
@@ -16,7 +16,7 @@ struct CapsuleInputView: View {
 
   var body: some View {
     HStack(spacing: 12) {
-      TextField("Ask Buddy anything", text: $appState.promptText)
+      TextField("Ask \(AppBrand.name) anything", text: $appState.promptText)
         .textFieldStyle(.plain)
         .font(EaselDesignSystem.Typography.interface(size: 15))
         .foregroundStyle(.primary)
