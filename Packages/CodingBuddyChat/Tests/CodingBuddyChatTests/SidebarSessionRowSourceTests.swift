@@ -24,8 +24,8 @@ struct SidebarSessionRowSourceTests {
       "Sources/CodingBuddyChat/Sidebar/SidebarSessionTypography.swift"
     )
 
-    #expect(typographySource.contains("static let titlePointSize: CGFloat = 8"))
-    #expect(typographySource.contains("static let supportingPointSize: CGFloat = 6"))
+    #expect(typographySource.contains("static let titlePointSize: CGFloat = 12"))
+    #expect(typographySource.contains("static let supportingPointSize: CGFloat = 8"))
     #expect(typographySource.contains("static let weight: Font.Weight = .regular"))
     #expect(rowSource.contains("@ScaledMetric(relativeTo: .callout)"))
     #expect(rowSource.contains("@ScaledMetric(relativeTo: .caption)"))
