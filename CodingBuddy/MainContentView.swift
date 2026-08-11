@@ -471,10 +471,12 @@ struct MainContentView: View {
     let items = chatService.currentMCPRenderItems
     if items.isEmpty {
       if chatService.currentMode == .systemDesign {
+        // The kickoff turn creates the canvas, so "agent responding, no canvas
+        // yet" reads as setup in progress rather than idle emptiness.
         SystemDesignWhiteboardEmptyView(
-          isCreatingWhiteboard: isWhiteboardCreationRequested,
+          isCreatingWhiteboard: isWhiteboardCreationRequested
+            || chatService.chatViewModel?.isLoading == true,
           canCreateWhiteboard: chatService.canRequestWhiteboard,
-          onContinueInChat: continueSystemDesignInChat,
           onCreateWhiteboard: createSystemDesignWhiteboard
         )
       } else {
@@ -498,7 +500,27 @@ struct MainContentView: View {
         isEmbedded: true
       )
       .background(EaselDesignSystem.Palette.canvas(for: colorScheme))
+      .overlay(alignment: .bottomTrailing) {
+        whiteboardReviewButton
+      }
     }
+  }
+
+  /// Sends the canvas (via its checkpoint) and any workspace code to the agent
+  /// for a coaching review. Floats bottom-trailing, clear of Excalidraw's own
+  /// bottom-leading zoom/undo controls.
+  private var whiteboardReviewButton: some View {
+    Button {
+      chatService.requestWhiteboardReview()
+    } label: {
+      Label("Ask Agent to Review", systemImage: "bubble.left.and.text.bubble.right")
+        .font(.system(size: 13, weight: .semibold))
+    }
+    .buttonStyle(.borderedProminent)
+    .controlSize(.large)
+    .disabled(!chatService.canRequestWhiteboardReview)
+    .help("The agent re-reads the whiteboard and your workspace code, then gives interviewer-style feedback")
+    .padding(16)
   }
 
   private var studioSurfaceTopBar: some View {
@@ -603,18 +625,6 @@ struct MainContentView: View {
     selectedSurface = .report
     Task {
       await chatService.endAndGrade()
-    }
-  }
-
-  private func continueSystemDesignInChat() {
-    if !panelLayoutState.showsChatPanel {
-      setPanelLayoutState(.chatPanelRestored)
-    }
-
-    isChatInputFocusRequested = false
-    Task { @MainActor in
-      await Task.yield()
-      isChatInputFocusRequested = true
     }
   }
 

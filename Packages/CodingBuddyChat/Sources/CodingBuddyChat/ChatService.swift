@@ -513,7 +513,7 @@ public final class ChatService: ChatServiceProtocol {
   }
 
   private func sendKickoffMessage(for request: NewSessionRequest) {
-    let text: String
+    var text: String
     if let configuration = request.knowledgeConfiguration,
        configuration.activity == .learn {
       let studySpace = knowledgeLibrary.studySpace(id: configuration.studySpaceID)
@@ -560,6 +560,12 @@ public final class ChatService: ChatServiceProtocol {
       text = constraints.isEmpty
         ? "Let's begin. Present my first question."
         : "Let's begin. Present my first question.\n\(constraints.joined(separator: "\n"))"
+    }
+    // System design gets its shared canvas in the very first turn so the
+    // candidate can diagram while clarifying — no separate create step.
+    // (Learning sessions kick off with a study plan, never a whiteboard.)
+    if request.mode == .systemDesign, request.knowledgeConfiguration?.activity != .learn {
+      text += "\n\n" + BuddyAgentInstructions.systemDesignKickoffWhiteboardDirective
     }
     sendMessageToViewModel(text)
   }
@@ -644,6 +650,23 @@ public final class ChatService: ChatServiceProtocol {
   public func requestWhiteboard() -> Bool {
     guard canRequestWhiteboard else { return false }
     sendMessageToViewModel(BuddyAgentInstructions.whiteboardRequestMessage)
+    return true
+  }
+
+  public var canRequestWhiteboardReview: Bool {
+    SystemDesignWhiteboardRequestPolicy.canRequestReview(
+      attemptStatus: interviewSession.activeAttempt?.status,
+      isChatLoading: chatViewModel?.isLoading == true,
+      hasRenderItems: !currentMCPRenderItems.isEmpty
+    )
+  }
+
+  /// Asks the agent to re-read the shared canvas checkpoint (and any workspace
+  /// code) and coach on the current design. Free — no hint cost.
+  @discardableResult
+  public func requestWhiteboardReview() -> Bool {
+    guard canRequestWhiteboardReview else { return false }
+    sendMessageToViewModel(BuddyAgentInstructions.whiteboardReviewRequestMessage)
     return true
   }
 
@@ -1141,6 +1164,8 @@ public final class ChatService: ChatServiceProtocol {
       return ""
     }
 
+    let whiteboardContext = whiteboardHiddenContext()
+
     let phase: BuddyAgentInstructions.AttemptPhase
     switch attempt.status {
     case .inProgress:
@@ -1154,7 +1179,7 @@ public final class ChatService: ChatServiceProtocol {
     }
 
     return BuddyAgentInstructions.appendingHiddenContext(
-      nil,
+      whiteboardContext,
       attempt: attempt,
       question: interviewSession.activeQuestion,
       timerRemaining: sessionTimer.remaining,
@@ -1162,6 +1187,16 @@ public final class ChatService: ChatServiceProtocol {
       drillRun: interviewSession.drillRun,
       suggestedDifficulty: attempt.mode == .drill ? interviewSession.suggestedNextDifficulty : nil
     )
+  }
+
+  /// The whiteboard app's own summary of edits the user made since the agent
+  /// last saw the canvas (`ui/update-model-context`). Consumed on send so each
+  /// summary reaches the agent exactly once; the agent reads the checkpoint for
+  /// the full scene.
+  private func whiteboardHiddenContext() -> String? {
+    let texts = mcpApps.consumeModelContextTexts(for: currentMCPRenderItems)
+    guard !texts.isEmpty else { return nil }
+    return "Whiteboard update (user edits on the shared canvas):\n" + texts.joined(separator: "\n")
   }
 
   private func setCurrentWorkingDirectory(_ path: String?) {

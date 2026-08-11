@@ -42,4 +42,28 @@ struct SystemDesignWhiteboardRequestPolicyTests {
       hasChatViewModel: false
     ))
   }
+
+  @Test
+  func reviewRequiresLiveAttemptIdleChatAndACanvas() {
+    #expect(SystemDesignWhiteboardRequestPolicy.canRequestReview(
+      attemptStatus: .inProgress,
+      isChatLoading: false,
+      hasRenderItems: true
+    ))
+    #expect(!SystemDesignWhiteboardRequestPolicy.canRequestReview(
+      attemptStatus: .inProgress,
+      isChatLoading: false,
+      hasRenderItems: false
+    ))
+    #expect(!SystemDesignWhiteboardRequestPolicy.canRequestReview(
+      attemptStatus: .inProgress,
+      isChatLoading: true,
+      hasRenderItems: true
+    ))
+    #expect(!SystemDesignWhiteboardRequestPolicy.canRequestReview(
+      attemptStatus: .evaluated,
+      isChatLoading: false,
+      hasRenderItems: true
+    ))
+  }
 }

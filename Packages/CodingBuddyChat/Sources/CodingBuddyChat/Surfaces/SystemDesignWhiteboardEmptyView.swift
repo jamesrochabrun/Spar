@@ -6,12 +6,13 @@
 import CodingBuddyKit
 import SwiftUI
 
-/// Offers the two actions that are actually available before a shared MCP
-/// whiteboard exists: return focus to chat or create the canvas.
+/// Transient placeholder before the shared MCP whiteboard exists. The session
+/// kickoff asks Buddy to create the canvas in its first turn, so this normally
+/// just shows setup progress; the manual create button is the fallback for
+/// sessions where that didn't happen (e.g. restored older sessions).
 public struct SystemDesignWhiteboardEmptyView: View {
   private let isCreatingWhiteboard: Bool
   private let canCreateWhiteboard: Bool
-  private let onContinueInChat: () -> Void
   private let onCreateWhiteboard: () -> Void
 
   @Environment(\.colorScheme) private var colorScheme
@@ -19,21 +20,19 @@ public struct SystemDesignWhiteboardEmptyView: View {
   public init(
     isCreatingWhiteboard: Bool,
     canCreateWhiteboard: Bool,
-    onContinueInChat: @escaping () -> Void,
     onCreateWhiteboard: @escaping () -> Void
   ) {
     self.isCreatingWhiteboard = isCreatingWhiteboard
     self.canCreateWhiteboard = canCreateWhiteboard
-    self.onContinueInChat = onContinueInChat
     self.onCreateWhiteboard = onCreateWhiteboard
   }
 
   public var body: some View {
     ContentUnavailableView {
-      Label("Create a shared whiteboard", systemImage: "rectangle.3.group")
+      Label("Shared whiteboard", systemImage: "rectangle.3.group")
     } description: {
       Text(
-        "Clarify the problem in chat, then create an editable canvas whenever you are ready to sketch."
+        "Buddy sets up an editable canvas at the start of the session — start diagramming as soon as it appears."
       )
     } actions: {
       VStack(spacing: 12) {
@@ -41,7 +40,7 @@ public struct SystemDesignWhiteboardEmptyView: View {
           HStack(spacing: 8) {
             ProgressView()
               .controlSize(.small)
-            Text("Buddy is creating the whiteboard…")
+            Text("Buddy is setting up the whiteboard…")
           }
           .foregroundStyle(.secondary)
           .accessibilityElement(children: .combine)
@@ -60,13 +59,6 @@ public struct SystemDesignWhiteboardEmptyView: View {
               .foregroundStyle(.secondary)
           }
         }
-
-        Button(
-          "Focus Chat",
-          systemImage: "message",
-          action: onContinueInChat
-        )
-        .buttonStyle(.bordered)
       }
       .controlSize(.large)
     }

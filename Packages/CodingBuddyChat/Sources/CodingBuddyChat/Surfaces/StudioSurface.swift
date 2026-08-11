@@ -50,7 +50,10 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
     let modeSurfaces: [StudioSurface]
     switch mode {
     case .systemDesign:
-      modeSurfaces = [.whiteboard, .hints, .report]
+      // Whiteboard leads (and is the default), but the workspace stays
+      // available for candidates who want to sketch code or notes alongside
+      // the diagram.
+      modeSurfaces = [.whiteboard, .workspace, .hints, .report]
     case .behavioral:
       modeSurfaces = [.hints, .report]
     case .mockInterview, .drill, .practice, nil:

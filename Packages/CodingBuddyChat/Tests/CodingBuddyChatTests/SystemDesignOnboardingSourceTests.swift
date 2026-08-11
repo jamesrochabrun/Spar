@@ -3,14 +3,17 @@ import Testing
 
 struct SystemDesignOnboardingSourceTests {
   @Test
-  func onboardingOffersRealActionsWithoutFakeProgress() throws {
+  func onboardingShowsSetupProgressWithAManualFallbackOnly() throws {
     let source = try sourceContents(
       "Sources/CodingBuddyChat/Surfaces/SystemDesignWhiteboardEmptyView.swift"
     )
 
-    #expect(source.contains("\"Focus Chat\""))
+    // The kickoff creates the canvas, so the placeholder is progress + a
+    // manual fallback — no chat-focus detour.
+    #expect(!source.contains("\"Focus Chat\""))
     #expect(source.contains("\"Create Whiteboard\""))
     #expect(source.contains("ProgressView"))
+    #expect(source.contains("Buddy is setting up the whiteboard"))
     #expect(source.contains("Wait for Buddy to finish responding"))
     #expect(!source.contains("static let phases"))
     #expect(!source.contains("users, scale, consistency"))

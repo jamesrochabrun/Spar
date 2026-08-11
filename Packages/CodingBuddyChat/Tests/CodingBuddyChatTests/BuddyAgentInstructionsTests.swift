@@ -302,6 +302,15 @@ struct BuddyAgentInstructionsTests {
   }
 
   @Test
+  func systemDesignKickoffDirectiveCreatesTheBoardWithoutBlockingOnClarification() {
+    let directive = BuddyAgentInstructions.systemDesignKickoffWhiteboardDirective
+    #expect(directive.contains("[CREATE WHITEBOARD]"))
+    // Sparse board, created in the same turn as the question.
+    #expect(directive.contains("requirements area"))
+    #expect(directive.contains("Do not wait for my clarifications"))
+  }
+
+  @Test
   func systemDesignOpeningKeepsClarificationCandidateLedForEveryProvider() {
     let prefixes = BuddyAgentInstructions.prefixes(for: .systemDesign, specialization: .iOS)
 

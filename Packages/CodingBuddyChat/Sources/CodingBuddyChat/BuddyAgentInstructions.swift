@@ -816,6 +816,28 @@ public enum BuddyAgentInstructions {
     intentionally sparse so I can drive the design.
     """
 
+  /// Appended to the system-design kickoff so the shared canvas exists from
+  /// turn one — the candidate can start diagramming while clarifying in chat,
+  /// instead of having to request the board separately.
+  public static let systemDesignKickoffWhiteboardDirective = """
+    [CREATE WHITEBOARD] In this same turn, after presenting the question, also \
+    create the shared editable whiteboard — only the problem title and a small \
+    empty requirements area, nothing else — so I can start diagramming \
+    immediately. Do not wait for my clarifications before creating it.
+    """
+
+  /// Sent by the whiteboard surface's review button (system design sessions).
+  /// The agent re-reads the shared canvas checkpoint — user edits are saved
+  /// back under the same checkpoint id — plus any workspace code, then coaches.
+  public static let whiteboardReviewRequestMessage = """
+    [REVIEW WHITEBOARD] I've updated the shared whiteboard — take a fresh look. \
+    Read the latest canvas state with the excalidraw read_checkpoint tool (the \
+    same checkpoint id from when you created the view), and also check any code \
+    or notes in my workspace files. Review my design like an interviewer: point \
+    out gaps, risks, and unstated assumptions, and ask one or two probing \
+    questions. Do not redraw or complete the design for me.
+    """
+
   public static func studyPlanGenerationDirective(
     studySpaceName: String,
     requestedItemID: String? = nil
