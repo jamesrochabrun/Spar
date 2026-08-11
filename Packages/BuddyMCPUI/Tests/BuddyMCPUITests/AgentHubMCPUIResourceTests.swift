@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import BuddyMCPApps
 @testable import BuddyMCPUI
 
 @Suite("AgentHubMCPUIResource")
@@ -192,5 +193,102 @@ struct MCPAppCSPHardeningTests {
       current: [toolInput, emptyResult],
       delivered: [toolInput, emptyResult]
     ).isEmpty)
+  }
+
+  @Test("Identity-keyed notifications suppress params-only redelivery but not identity changes")
+  @MainActor
+  func identityKeyedNotificationsSuppressParamsOnlyRedelivery() {
+    let delivered = AgentHubMCPUIOutgoingNotification(
+      method: "ui/notifications/tool-input",
+      params: .object(["arguments": .object(["elements": .string("[original]")])]),
+      identity: "call-1"
+    )
+
+    // Same invocation, rewritten arguments (the user's canvas edits folded back
+    // in by the host): must NOT redraw the running app.
+    let rewritten = AgentHubMCPUIOutgoingNotification(
+      method: "ui/notifications/tool-input",
+      params: .object(["arguments": .object(["elements": .string("[edited]")])]),
+      identity: "call-1"
+    )
+    #expect(AgentHubMCPUIWebView.Coordinator.changedNotifications(
+      current: [rewritten],
+      delivered: [delivered]
+    ).isEmpty)
+
+    // A different invocation (picker switch on the same app shell) redelivers.
+    let otherInvocation = AgentHubMCPUIOutgoingNotification(
+      method: "ui/notifications/tool-input",
+      params: .object(["arguments": .object([:])]),
+      identity: "call-2"
+    )
+    #expect(AgentHubMCPUIWebView.Coordinator.changedNotifications(
+      current: [otherInvocation],
+      delivered: [delivered]
+    ) == [otherInvocation])
+
+    // The late tool-result transition still redelivers (identity encodes it).
+    let pendingResult = AgentHubMCPUIOutgoingNotification(
+      method: "ui/notifications/tool-result",
+      params: .object(["content": .array([])]),
+      identity: "call-1|pending"
+    )
+    let landedResult = AgentHubMCPUIOutgoingNotification(
+      method: "ui/notifications/tool-result",
+      params: .object(["structuredContent": .object(["checkpointId": .string("abc")])]),
+      identity: "call-1|result"
+    )
+    #expect(AgentHubMCPUIWebView.Coordinator.changedNotifications(
+      current: [landedResult],
+      delivered: [pendingResult]
+    ) == [landedResult])
+  }
+
+  @Test("Codex snake-case structured result is normalized for MCP Apps")
+  @MainActor
+  func codexStructuredResultIsNormalized() {
+    let productionResult = AgentHubMCPUIJSONValue.object([
+      "structured_content": .object([
+        "checkpointId": .string("73c1a159be6e4d4d91")
+      ]),
+      "content": .array([
+        .object([
+          "type": .string("text"),
+          "text": .string("Diagram displayed! Checkpoint id: 73c1a159be6e4d4d91")
+        ])
+      ])
+    ])
+
+    let params = MCPAppHostBridgeHandler.toolResultParams(from: productionResult)
+
+    #expect(params["structuredContent"]?["checkpointId"]?.stringValue == "73c1a159be6e4d4d91")
+    #expect(params["content"]?.arrayValue?.count == 1)
+  }
+
+  @Test("Checkpoint save prompts once per panel session")
+  @MainActor
+  func checkpointSavePromptsOncePerPanelSession() async throws {
+    let controller = MCPAppConsentController(autoDenyTimeout: .seconds(10))
+    let resource = MCPAppResource(
+      provider: .claude,
+      projectPath: "/tmp/ws",
+      serverName: "excalidraw",
+      source: .liveDiscovery,
+      resource: AgentHubMCPUIResource(uri: "ui://excalidraw/mcp-app.html", text: "<main/>")
+    )
+
+    let requirement = Task { @MainActor in
+      try await controller.require(.callTool("save_checkpoint"), resource: resource)
+    }
+    while controller.pendingRequest == nil {
+      await Task.yield()
+    }
+    #expect(controller.pendingRequest?.action == .callTool("save_checkpoint"))
+    controller.approvePendingRequest()
+    try await requirement.value
+
+    // Approval is cached for this panel session, as it is in AgentHub.
+    try await controller.require(.callTool("save_checkpoint"), resource: resource)
+    #expect(controller.pendingRequest == nil)
   }
 }

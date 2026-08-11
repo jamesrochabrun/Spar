@@ -35,14 +35,37 @@ public final class MCPAppSessionService: MCPAppHostBridging {
   public private(set) var modelContextTextByResourceID: [String: String] = [:]
 
   private let discoveryService: any MCPAppDiscoveryServiceProtocol
+  private let invocationStore: any MCPAppInvocationStoring
+  private let grantStore: any MCPAppGrantStoring
+  private let transcriptReader: any MCPAppInvocationTranscriptReading
   private var toolTemplatesByServer: [MCPAppServerCacheKey: [String: MCPAppToolTemplate]] = [:]
   private var resolvedServerKeys: Set<MCPAppServerCacheKey> = []
   private var appShellsByKey: [String: AgentHubMCPUIResource] = [:]
   private var grantedNetworkKeys: Set<String> = []
   private var resolutionTask: Task<Void, Never>?
+  /// Chat session id each context persists under, bound once the id is known.
+  private var chatSessionIdByContext: [String: String] = [:]
+  /// Chained per-context persist tasks so writes land in capture order.
+  private var persistTasksByContext: [String: Task<Void, Never>] = [:]
+  /// Latest checkpoint payload the rendered app saved, by checkpoint id. The
+  /// app's `save_checkpoint` bridge calls carry the user's full edited canvas.
+  private var checkpointDataById: [String: String] = [:]
+  /// Which context each checkpoint belongs to, so it persists with its session.
+  private var contextKeyByCheckpointId: [String: String] = [:]
 
-  public init(discoveryService: (any MCPAppDiscoveryServiceProtocol)? = nil) {
+  public init(
+    discoveryService: (any MCPAppDiscoveryServiceProtocol)? = nil,
+    invocationStore: (any MCPAppInvocationStoring)? = nil,
+    grantStore: (any MCPAppGrantStoring)? = nil,
+    transcriptReader: (any MCPAppInvocationTranscriptReading)? = nil
+  ) {
     self.discoveryService = discoveryService ?? MCPAppDiscoveryService.shared
+    self.invocationStore = invocationStore ?? FileMCPAppInvocationStore()
+    self.transcriptReader = transcriptReader ?? FileMCPAppInvocationTranscriptReader()
+    let resolvedGrantStore = grantStore ?? FileMCPAppGrantStore()
+    self.grantStore = resolvedGrantStore
+    let grants = resolvedGrantStore.load()
+    grantedNetworkKeys = grants.networkGrantKeys
   }
 
   // MARK: - Capture (fed from ChatViewModel's MCP hooks)
@@ -62,6 +85,19 @@ public final class MCPAppSessionService: MCPAppHostBridging {
       .flatMap { try? JSONSerialization.jsonObject(with: $0) }
       .map { AgentHubMCPUIJSONValue(any: $0) }
 
+    var invocations = invocationsByContext[contextKey] ?? []
+    if let existingIndex = invocations.firstIndex(where: { $0.id == toolUseId }),
+       invocations[existingIndex].arguments != nil {
+      // A re-capture of a known tool_use id is the provider replaying the
+      // session history on resume — new calls always mint fresh ids. Keep the
+      // existing invocation: its arguments may carry the user's canvas edits
+      // (folded in from a checkpoint save), which the replayed original would
+      // silently revert.
+      mcpLog.notice("recordToolUse replay-skip id=\(toolUseId, privacy: .public) tool=\(parsed.tool, privacy: .public)")
+      scheduleResolution(provider: provider, projectPath: projectPath, contextKey: contextKey)
+      return
+    }
+
     let invocation = MCPAppInvocation(
       id: toolUseId,
       serverName: parsed.server,
@@ -70,17 +106,20 @@ public final class MCPAppSessionService: MCPAppHostBridging {
       result: nil
     )
 
-    var invocations = invocationsByContext[contextKey] ?? []
     invocations.removeAll { $0.id == toolUseId }
     invocations.append(invocation)
     invocationsByContext[contextKey] = invocations
+    persistInvocations(for: contextKey)
 
     scheduleResolution(provider: provider, projectPath: projectPath, contextKey: contextKey)
   }
 
   public func recordToolResult(contextKey: String, toolUseId: String, resultJSON: String?) {
     guard var invocations = invocationsByContext[contextKey],
-          let index = invocations.firstIndex(where: { $0.id == toolUseId }) else { return }
+          let index = invocations.firstIndex(where: { $0.id == toolUseId }) else {
+      mcpLog.notice("recordToolResult unmatched id=\(toolUseId, privacy: .public)")
+      return
+    }
 
     let result = resultJSON.map(Self.parseToolResult)
 
@@ -93,10 +132,140 @@ public final class MCPAppSessionService: MCPAppHostBridging {
       result: result
     )
     invocationsByContext[contextKey] = invocations
+    persistInvocations(for: contextKey)
   }
 
   public func clearContext(_ contextKey: String) {
     invocationsByContext.removeValue(forKey: contextKey)
+    chatSessionIdByContext.removeValue(forKey: contextKey)
+    persistTasksByContext.removeValue(forKey: contextKey)
+    for (id, owner) in contextKeyByCheckpointId where owner == contextKey {
+      contextKeyByCheckpointId.removeValue(forKey: id)
+      checkpointDataById.removeValue(forKey: id)
+    }
+  }
+
+  // MARK: - Per-session persistence
+
+  /// Binds a context to its chat session id so captures persist under it.
+  /// New sessions get their id only after the first turn, so anything already
+  /// captured in memory is flushed to the store on bind.
+  public func bindChatSession(_ chatSessionId: String, contextKey: String) {
+    guard !chatSessionId.isEmpty else { return }
+    let previous = chatSessionIdByContext[contextKey]
+    chatSessionIdByContext[contextKey] = chatSessionId
+    if previous != chatSessionId, invocationsByContext[contextKey]?.isEmpty == false {
+      persistInvocations(for: contextKey)
+    }
+  }
+
+  /// Rehydrates a reopened session's whiteboard: loads the persisted
+  /// invocations and checkpoints (unless live capture already populated the
+  /// context) and resolves their app shells so the surface can render
+  /// immediately.
+  public func restoreChatSession(
+    _ chatSessionId: String,
+    contextKey: String,
+    provider: SessionProviderKind,
+    projectPath: String
+  ) async {
+    bindChatSession(chatSessionId, contextKey: contextKey)
+
+    let stored = await invocationStore.loadState(chatSessionId: chatSessionId)
+    let transcriptInvocations = await transcriptReader.invocations(
+      provider: provider,
+      projectPath: projectPath,
+      chatSessionId: chatSessionId
+    )
+    // Checkpoints merge regardless of live capture: `read_checkpoint` callbacks
+    // can reference checkpoints from earlier runs of the same session.
+    for (id, data) in stored.checkpointDataById where checkpointDataById[id] == nil {
+      checkpointDataById[id] = data
+      contextKeyByCheckpointId[id] = contextKey
+    }
+
+    // Local state wins for arguments because save_checkpoint folds the user's
+    // edited elements into them. The provider transcript fills missing results
+    // (especially create_view's checkpoint id) and appends invocations not yet
+    // seen by the live SDK callbacks.
+    let localInvocations = invocationsByContext[contextKey]?.isEmpty == false
+      ? invocationsByContext[contextKey] ?? []
+      : stored.invocations
+    let merged = Self.mergeInvocations(
+      local: localInvocations,
+      transcript: transcriptInvocations
+    )
+    guard !merged.isEmpty else { return }
+
+    mcpLog.notice(
+      "restored session=\(chatSessionId, privacy: .public) local=\(localInvocations.count) transcript=\(transcriptInvocations.count) merged=\(merged.count)"
+    )
+    invocationsByContext[contextKey] = merged
+    persistInvocations(for: contextKey)
+    await ensureRenderItems(provider: provider, projectPath: projectPath, contextKey: contextKey)
+  }
+
+  /// Merges the durable local whiteboard state with the provider transcript.
+  /// Local arguments are authoritative because they may contain user edits;
+  /// transcript results are authoritative when local live capture missed them.
+  static func mergeInvocations(
+    local: [MCPAppInvocation],
+    transcript: [MCPAppInvocation]
+  ) -> [MCPAppInvocation] {
+    var merged = local
+    for transcriptInvocation in transcript {
+      guard let index = merged.firstIndex(where: { $0.id == transcriptInvocation.id }) else {
+        merged.append(transcriptInvocation)
+        continue
+      }
+      let localInvocation = merged[index]
+      merged[index] = MCPAppInvocation(
+        id: localInvocation.id,
+        serverName: localInvocation.serverName,
+        toolName: localInvocation.toolName,
+        arguments: localInvocation.arguments ?? transcriptInvocation.arguments,
+        result: localInvocation.result ?? transcriptInvocation.result
+      )
+    }
+    return merged
+  }
+
+  /// Drops the persisted whiteboard state of a deleted session.
+  public func deleteStoredInvocations(chatSessionId: String) async {
+    for (contextKey, sessionId) in chatSessionIdByContext where sessionId == chatSessionId {
+      chatSessionIdByContext.removeValue(forKey: contextKey)
+      persistTasksByContext.removeValue(forKey: contextKey)
+      for (id, owner) in contextKeyByCheckpointId where owner == contextKey {
+        contextKeyByCheckpointId.removeValue(forKey: id)
+        checkpointDataById.removeValue(forKey: id)
+      }
+    }
+    await invocationStore.deleteState(chatSessionId: chatSessionId)
+  }
+
+  /// Awaits all in-flight persistence writes (used by tests and shutdown).
+  public func flushPersistence() async {
+    for task in persistTasksByContext.values {
+      await task.value
+    }
+  }
+
+  private func persistInvocations(for contextKey: String) {
+    guard let chatSessionId = chatSessionIdByContext[contextKey] else {
+      mcpLog.notice("persist skipped — context has no bound chat session (invocations=\(self.invocationsByContext[contextKey]?.count ?? 0))")
+      return
+    }
+    let snapshot = StoredWhiteboardSessionState(
+      invocations: invocationsByContext[contextKey] ?? [],
+      checkpointDataById: checkpointDataById.filter {
+        contextKeyByCheckpointId[$0.key] == contextKey
+      }
+    )
+    let previous = persistTasksByContext[contextKey]
+    persistTasksByContext[contextKey] = Task { [invocationStore] in
+      await previous?.value
+      await invocationStore.saveState(snapshot, chatSessionId: chatSessionId)
+    }
   }
 
   /// Parses a captured tool result: JSON when it is JSON (Codex's `Ok` error
@@ -117,7 +286,7 @@ public final class MCPAppSessionService: MCPAppHostBridging {
   /// Splits a provider-qualified MCP tool name into server + short tool name.
   /// Claude uses `mcp__<server>__<tool>`; Codex's item stream flattens the
   /// invocation to `<server>__<tool>` or `<server>.<tool>`.
-  static func parseMCPToolName(_ toolName: String) -> (server: String, tool: String)? {
+  nonisolated static func parseMCPToolName(_ toolName: String) -> (server: String, tool: String)? {
     if toolName.hasPrefix("mcp__") {
       let parts = toolName.split(separator: "__", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
       guard parts.count == 3, !parts[1].isEmpty, !parts[2].isEmpty else { return nil }
@@ -257,6 +426,7 @@ public final class MCPAppSessionService: MCPAppHostBridging {
   }
 
   public func shutdown() async {
+    await flushPersistence()
     await discoveryService.shutdown()
   }
 
@@ -267,13 +437,102 @@ public final class MCPAppSessionService: MCPAppHostBridging {
     name: String,
     arguments: AgentHubMCPUIJSONValue?
   ) async throws -> AgentHubMCPUIJSONValue {
-    try await discoveryService.callTool(
+    // The app saves the user's edited canvas through this bridge. Capture it
+    // before forwarding so edits survive locally even when the remote server
+    // rejects or later forgets the checkpoint.
+    if name == "save_checkpoint",
+       let id = arguments?["id"]?.stringValue,
+       let data = arguments?["data"]?.stringValue {
+      recordCheckpointSave(id: id, data: data)
+    }
+
+    // Serve checkpoint reads from the local capture: every save flowed through
+    // here, so it is at least as fresh as the server's copy — and still there
+    // after a relaunch when the remote server's checkpoint is gone.
+    if name == "read_checkpoint",
+       let id = arguments?["id"]?.stringValue,
+       let cached = checkpointDataById[id] {
+      return .object([
+        "content": .array([
+          .object(["type": .string("text"), "text": .string(cached)])
+        ])
+      ])
+    }
+
+    return try await discoveryService.callTool(
       provider: resource.provider,
       projectPath: resource.projectPath,
       serverName: resource.serverName,
       name: name,
       arguments: arguments
     )
+  }
+
+  /// Caches a saved checkpoint and folds its edited elements back into the
+  /// invocation whose result issued that checkpoint id, so every future replay
+  /// of the invocation — same run or after relaunch — draws the edited state.
+  /// The live app is not disturbed: `tool-input` redelivery is identity-keyed.
+  private func recordCheckpointSave(id: String, data: String) {
+    mcpLog.notice("checkpoint save captured id=\(id, privacy: .public) bytes=\(data.count)")
+    checkpointDataById[id] = data
+
+    // Guard loose substring matching below against degenerate ids.
+    guard id.count >= 8 else { return }
+    for (contextKey, invocations) in invocationsByContext {
+      guard let index = invocations.lastIndex(where: {
+        Self.resultMentionsCheckpoint($0.result, id: id)
+      }) else { continue }
+
+      contextKeyByCheckpointId[id] = contextKey
+      let existing = invocations[index]
+      if let rewritten = Self.arguments(existing.arguments, replacingElementsWith: data) {
+        var updated = invocations
+        updated[index] = MCPAppInvocation(
+          id: existing.id,
+          serverName: existing.serverName,
+          toolName: existing.toolName,
+          arguments: rewritten,
+          result: existing.result
+        )
+        invocationsByContext[contextKey] = updated
+      }
+      persistInvocations(for: contextKey)
+      return
+    }
+    mcpLog.notice("checkpoint save matched no invocation id=\(id, privacy: .public) — cached in-memory only")
+  }
+
+  /// Whether a tool result references a checkpoint id (Claude stores the result
+  /// as a JSON string, Codex as structured content — a serialized substring
+  /// check covers both shapes).
+  static func resultMentionsCheckpoint(_ result: AgentHubMCPUIJSONValue?, id: String) -> Bool {
+    guard let result,
+          let data = try? JSONEncoder().encode(result),
+          let text = String(data: data, encoding: .utf8) else { return false }
+    return text.contains(id)
+  }
+
+  /// Rebuilds tool arguments with `elements` replaced by the checkpoint's
+  /// edited elements (checkpoint data is `{"elements":[...]}`).
+  static func arguments(
+    _ arguments: AgentHubMCPUIJSONValue?,
+    replacingElementsWith checkpointData: String
+  ) -> AgentHubMCPUIJSONValue? {
+    guard let data = checkpointData.data(using: .utf8),
+          let parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+          let elements = parsed["elements"] as? [Any],
+          let elementsData = try? JSONSerialization.data(withJSONObject: elements),
+          let elementsJSON = String(data: elementsData, encoding: .utf8) else {
+      return nil
+    }
+    var object: [String: AgentHubMCPUIJSONValue]
+    if case .object(let existing)? = arguments {
+      object = existing
+    } else {
+      object = [:]
+    }
+    object["elements"] = .string(elementsJSON)
+    return .object(object)
   }
 
   public func readMCPAppResource(
@@ -333,8 +592,10 @@ public final class MCPAppSessionService: MCPAppHostBridging {
     return params["text"]?.stringValue
   }
 
-  /// Per-launch network grants, keyed by app identity (server + sorted host
-  /// set) so a new app, or one whose declared domains changed, still prompts.
+  /// Durable network grants, keyed by app identity (server + sorted host set)
+  /// so a new app, or one whose declared domains changed, still prompts.
+  /// Loaded from disk at init and saved on grant, so an approved app renders
+  /// straight to canvas after a relaunch instead of re-showing the banner.
   public func isMCPAppNetworkGranted(serverName: String, hosts: [String]) -> Bool {
     guard !hosts.isEmpty else { return false }
     return grantedNetworkKeys.contains(networkGrantKey(serverName: serverName, hosts: hosts))
@@ -343,9 +604,14 @@ public final class MCPAppSessionService: MCPAppHostBridging {
   public func grantMCPAppNetwork(serverName: String, hosts: [String]) {
     guard !hosts.isEmpty else { return }
     grantedNetworkKeys.insert(networkGrantKey(serverName: serverName, hosts: hosts))
+    persistGrants()
   }
 
   // MARK: - Private helpers
+
+  private func persistGrants() {
+    grantStore.save(MCPAppGrantRecord(networkGrantKeys: grantedNetworkKeys))
+  }
 
   private func networkGrantKey(serverName: String, hosts: [String]) -> String {
     ([serverName] + hosts.sorted()).joined(separator: "|")

@@ -515,6 +515,7 @@ final class StreamProcessor {
           toolName: toolUse.name,
           input: toolUse.input.formattedDescription(),
           toolInputData: ToolInputData(parameters: parameters, rawParameters: rawParameters),
+          toolUseID: toolUse.id,
           taskGroupId: state.currentTaskGroupId,
           isTaskContainer: isTaskTool
         )
@@ -552,6 +553,7 @@ final class StreamProcessor {
         let resultMessage = MessageFactory.toolResultMessage(
           content: toolResult.content,
           isError: toolResult.isError == true,
+          toolUseID: toolResult.toolUseId,
           taskGroupId: state.currentTaskGroupId
         )
         debugLogger.stream("Creating tool result message")
@@ -618,6 +620,7 @@ final class StreamProcessor {
         let resultMessage = MessageFactory.toolResultMessage(
           content: toolResult.content,
           isError: toolResult.isError == true,
+          toolUseID: toolResult.toolUseId,
           taskGroupId: state.currentTaskGroupId
         )
         messageStore.addMessage(resultMessage)
@@ -706,6 +709,7 @@ final class StreamProcessor {
       toolName: toolUse.name,  // Use the actual name from the API
       input: planContent.isEmpty ? "Plan approval requested" : planContent,
       toolInputData: ToolInputData(parameters: parameters, rawParameters: nil),
+      toolUseID: toolUse.id,
       taskGroupId: state.currentTaskGroupId,
       isTaskContainer: false
     )

@@ -59,10 +59,17 @@ public struct AgentHubMCPUIResourceView: View {
 public struct AgentHubMCPUIOutgoingNotification: Sendable, Equatable {
   public let method: String
   public let params: AgentHubMCPUIJSONValue?
+  /// Redelivery key. When set, a later notification with the same method and
+  /// identity counts as already delivered even if its params changed — e.g. a
+  /// host-side rewrite of a delivered `tool-input` must not redraw the running
+  /// app (the app's own canvas is the source of that rewrite). When nil, any
+  /// params change redelivers.
+  public let identity: String?
 
-  public init(method: String, params: AgentHubMCPUIJSONValue?) {
+  public init(method: String, params: AgentHubMCPUIJSONValue?, identity: String? = nil) {
     self.method = method
     self.params = params
+    self.identity = identity
   }
 }
 
@@ -430,7 +437,14 @@ public struct AgentHubMCPUIWebView: NSViewRepresentable {
       current: [AgentHubMCPUIOutgoingNotification],
       delivered: [AgentHubMCPUIOutgoingNotification]
     ) -> [AgentHubMCPUIOutgoingNotification] {
-      current.filter { !delivered.contains($0) }
+      current.filter { notification in
+        if let identity = notification.identity {
+          return !delivered.contains {
+            $0.method == notification.method && $0.identity == identity
+          }
+        }
+        return !delivered.contains(notification)
+      }
     }
 
     public func userContentController(

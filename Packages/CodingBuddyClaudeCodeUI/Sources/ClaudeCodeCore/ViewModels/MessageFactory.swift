@@ -91,7 +91,12 @@ public struct MessageFactory {
   ///   - taskGroupId: Optional group ID for Task tool execution tracking
   /// - Returns: A ChatMessage configured as either a tool result or tool error
   /// - Note: Handles both string results and structured item results
-  static func toolResultMessage(content: MessageResponse.Content.ToolResultContent, isError: Bool, taskGroupId: UUID? = nil) -> ChatMessage {
+  static func toolResultMessage(
+    content: MessageResponse.Content.ToolResultContent,
+    isError: Bool,
+    toolUseID: String? = nil,
+    taskGroupId: UUID? = nil
+  ) -> ChatMessage {
     var contentString = ""
     switch content {
     case .string(let stringValue):
@@ -112,6 +117,7 @@ public struct MessageFactory {
       role: role,
       content: contentString,
       messageType: messageType,
+      toolUseID: toolUseID,
       isError: isError,
       taskGroupId: taskGroupId
     )

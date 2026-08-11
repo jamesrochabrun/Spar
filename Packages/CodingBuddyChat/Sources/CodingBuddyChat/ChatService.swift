@@ -739,6 +739,15 @@ public final class ChatService: ChatServiceProtocol {
       sessionIdByViewModelId[ObjectIdentifier(context.viewModel)] = sessionToLoad.id
     }
 
+    // Rehydrate the session's whiteboard from the persisted invocations (a
+    // context that already captured live invocations keeps them instead).
+    await mcpApps.restoreChatSession(
+      sessionToLoad.id,
+      contextKey: context.mcpContextKey,
+      provider: mcpProviderKind,
+      projectPath: context.viewModel.projectPath
+    )
+
     activateContext(context)
 
     setCurrentWorkingDirectory(normalized(context.viewModel.projectPath) ?? sessionToLoad.workingDirectory)
@@ -772,6 +781,8 @@ public final class ChatService: ChatServiceProtocol {
       )
       return
     }
+
+    await mcpApps.deleteStoredInvocations(chatSessionId: session.id)
 
     if let context = sessionContextsById.removeValue(forKey: session.id) {
       sessionIdByViewModelId.removeValue(forKey: ObjectIdentifier(context.viewModel))
@@ -916,6 +927,7 @@ public final class ChatService: ChatServiceProtocol {
     viewModel.onAssistantTurnCompleted = { [weak self, weak viewModel] _, message in
       guard let self, let viewModel, self.isVisibleViewModel(viewModel) else { return }
       self.handleAssistantTurnCompleted(message, mode: mode, viewModel: viewModel)
+      self.reconcileMCPApps(for: viewModel)
     }
 
     let mcpContextKey = UUID().uuidString
@@ -1120,6 +1132,11 @@ public final class ChatService: ChatServiceProtocol {
     pendingSessionContextsByViewModelId.removeValue(forKey: viewModelId)
     sessionContextsById[sessionId] = context
     sessionIdByViewModelId[viewModelId] = sessionId
+    mcpApps.bindChatSession(sessionId, contextKey: context.mcpContextKey)
+    reconcileMCPApps(
+      context: context,
+      chatSessionId: sessionId
+    )
 
     guard isVisibleViewModel(viewModel) else {
       onSessionChanged?()
@@ -1146,6 +1163,36 @@ public final class ChatService: ChatServiceProtocol {
   private func isVisibleViewModel(_ viewModel: ChatViewModel?) -> Bool {
     guard let viewModel, let chatViewModel else { return false }
     return chatViewModel === viewModel
+  }
+
+  /// Reconciles live MCP capture with the provider's persisted transcript.
+  /// Claude's SDK stream can omit tool-result correlation in production, while
+  /// its JSONL always carries tool_use.id/tool_result.tool_use_id. Running this
+  /// after each completed turn gives an open canvas its checkpoint id promptly;
+  /// running it at session binding/restoration makes relaunch deterministic.
+  private func reconcileMCPApps(for viewModel: ChatViewModel) {
+    let viewModelID = ObjectIdentifier(viewModel)
+    guard let context = context(for: viewModel),
+          let chatSessionId = sessionIdByViewModelId[viewModelID] else {
+      return
+    }
+    reconcileMCPApps(context: context, chatSessionId: chatSessionId)
+  }
+
+  private func reconcileMCPApps(
+    context: ChatSessionContext,
+    chatSessionId: String
+  ) {
+    let provider = mcpProviderKind
+    let projectPath = context.viewModel.projectPath
+    Task { [mcpApps] in
+      await mcpApps.restoreChatSession(
+        chatSessionId,
+        contextKey: context.mcpContextKey,
+        provider: provider,
+        projectPath: projectPath
+      )
+    }
   }
 
   private func sendMessageToViewModel(_ text: String, context: String? = nil, hiddenContext: String? = nil) {

@@ -753,13 +753,20 @@ final class MCPAppHostBridgeHandler: AgentHubMCPUIBridgeHandler {
   func appReadyNotifications() -> [AgentHubMCPUIOutgoingNotification] {
     guard let invocation else { return [] }
     return [
+      // Identity is the invocation id: switching to another invocation redelivers,
+      // but a host-side arguments rewrite of the same invocation (folding the
+      // user's canvas edits back in) must not redraw the app that made them.
       AgentHubMCPUIOutgoingNotification(
         method: "ui/notifications/tool-input",
-        params: .object(["arguments": invocation.arguments ?? .object([:])])
+        params: .object(["arguments": invocation.arguments ?? .object([:])]),
+        identity: invocation.id
       ),
+      // The result's presence is part of the identity so the late-arriving
+      // tool_result (carrying e.g. Excalidraw's checkpoint id) still delivers.
       AgentHubMCPUIOutgoingNotification(
         method: "ui/notifications/tool-result",
-        params: Self.toolResultParams(from: invocation.result)
+        params: Self.toolResultParams(from: invocation.result),
+        identity: "\(invocation.id)|\(invocation.result != nil ? "result" : "pending")"
       )
     ]
   }
@@ -782,6 +789,15 @@ final class MCPAppHostBridgeHandler: AgentHubMCPUIBridgeHandler {
       // Already a full MCP result with structuredContent — pass through.
       if object["structuredContent"] != nil {
         return result
+      }
+      // Provider adapters may preserve the wire-format snake_case key. MCP Apps
+      // JavaScript consumes the SDK's camelCase shape, so normalize it at this
+      // host boundary instead of making every embedded app provider-aware.
+      if let structuredContent = object["structured_content"] {
+        return .object([
+          "content": object["content"] ?? .array([]),
+          "structuredContent": structuredContent
+        ])
       }
       // Has content blocks (e.g. Codex's Ok-wrapped result) but no structuredContent —
       // derive structuredContent by parsing the first JSON text block.
