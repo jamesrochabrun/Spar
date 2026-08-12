@@ -13,7 +13,10 @@ struct CodingBuddyApp: App {
 
   var body: some Scene {
     Settings {
-      CodingBuddyChatSettingsView(chatService: appDelegate.chatService)
+      CodingBuddyChatSettingsView(
+        chatService: appDelegate.chatService,
+        voiceController: appDelegate.voiceController
+      )
         .tint(EaselDesignSystem.Palette.accent)
     }
     .commands {
@@ -21,6 +24,12 @@ struct CodingBuddyApp: App {
         Button("Check for Updates...") {
           appDelegate.checkForUpdatesFromMenu(nil)
         }
+      }
+      CommandGroup(after: .sidebar) {
+        Button("Show Voice") {
+          appDelegate.toggleVoiceHUD(nil)
+        }
+        .keyboardShortcut("v", modifiers: [.command, .option])
       }
     }
   }

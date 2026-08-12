@@ -207,6 +207,11 @@ public final class ChatViewModel {
   /// Error queue for multiple errors
   public var errorQueue: [ErrorInfo] = []
 
+  /// One-shot request from an embedding app to place text into the visible
+  /// composer without submitting it. The UUID makes repeated identical
+  /// dictation transcripts observable as distinct requests.
+  public private(set) var inputDraftRequest: ChatInputDraftRequest?
+
   /// Last error for debug reporting (private, captured when error occurs)
   private var lastError: Error?
   
@@ -670,6 +675,13 @@ EOF
   }
   
   // MARK: - Public Methods
+
+  public func requestInputDraft(_ text: String) {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    inputDraftRequest = ChatInputDraftRequest(text: trimmed)
+  }
+
   /// Retries the last user message with all its original data
   public func retryLastMessage() {
     guard let lastUserMessage = messages.last(where: { $0.role == .user }) else { return }

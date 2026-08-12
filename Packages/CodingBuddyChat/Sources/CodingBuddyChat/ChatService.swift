@@ -163,7 +163,6 @@ public final class ChatService: ChatServiceProtocol {
   public var onSessionChanged: (() -> Void)?
   /// Called when an evaluation lands so the UI can auto-switch to the report surface.
   public var onEvaluationRecorded: ((RubricEvaluation) -> Void)?
-
   private var isInitializing = false
   private let persistentPreferencesManager: PersistentPreferencesManager
   private let mcpToolsDiscovery: MCPToolsDiscoveryService
@@ -926,7 +925,11 @@ public final class ChatService: ChatServiceProtocol {
     }
     viewModel.onAssistantTurnCompleted = { [weak self, weak viewModel] _, message in
       guard let self, let viewModel, self.isVisibleViewModel(viewModel) else { return }
-      self.handleAssistantTurnCompleted(message, mode: mode, viewModel: viewModel)
+      self.handleAssistantTurnCompleted(
+        message,
+        mode: mode,
+        viewModel: viewModel
+      )
       self.reconcileMCPApps(for: viewModel)
     }
 

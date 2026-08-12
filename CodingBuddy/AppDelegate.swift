@@ -14,7 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let isFloatingChatBarEnabled: Bool
   private let softwareUpdater: SoftwareUpdating
   let appState = AppState()
-  let chatService = ChatService()
+  let chatService: ChatService
+  let voiceController: CodingBuddyVoiceController
 
   override convenience init() {
     self.init(isFloatingChatBarEnabled: false)
@@ -24,6 +25,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     isFloatingChatBarEnabled: Bool,
     softwareUpdater: SoftwareUpdating? = nil
   ) {
+    let chatService = ChatService()
+    self.chatService = chatService
+    voiceController = CodingBuddyVoiceController(session: chatService)
     self.isFloatingChatBarEnabled = isFloatingChatBarEnabled
     self.softwareUpdater = softwareUpdater ?? SparkleSoftwareUpdater()
     super.init()
@@ -39,9 +43,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     self.windowController = controller
     controller.showCanvas()
     configureStatusItem()
+    voiceController.start()
+    Task {
+      await chatService.initialize()
+    }
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    voiceController.stop()
     let service = chatService
     Task { @MainActor in
       await service.mcpApps.shutdown()
@@ -125,6 +134,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       menu.addItem(openChatBarItem)
     }
 
+    let voiceItem = NSMenuItem(
+      title: "Show Voice",
+      action: #selector(toggleVoiceHUD(_:)),
+      keyEquivalent: ""
+    )
+    voiceItem.target = self
+    menu.addItem(voiceItem)
+
     menu.addItem(NSMenuItem.separator())
 
     let checkForUpdatesItem = NSMenuItem(
@@ -178,6 +195,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   @objc func checkForUpdatesFromMenu(_ sender: Any?) {
     softwareUpdater.checkForUpdates()
+  }
+
+  @objc func toggleVoiceHUD(_ sender: Any?) {
+    voiceController.toggleHUD()
   }
 
   @objc private func quitApp(_ sender: Any?) {

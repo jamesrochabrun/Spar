@@ -187,6 +187,11 @@ public struct ChatScreen: View {
     } message: {
       Text("You can now continue your conversation")
     }
+    .onChange(of: viewModel.inputDraftRequest) { _, request in
+      guard let request else { return }
+      messageText = request.merging(into: messageText)
+      triggerInputFocus = true
+    }
   }
   
   // MARK: - Subviews

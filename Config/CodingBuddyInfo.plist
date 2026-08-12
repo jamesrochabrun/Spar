@@ -30,6 +30,10 @@
   <string>AccentColor</string>
   <key>NSHumanReadableCopyright</key>
   <string>Copyright 2025 James Rochabrun. All rights reserved.</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Spar uses the microphone when you start dictation or a realtime voice conversation.</string>
+  <key>NSScreenCaptureUsageDescription</key>
+  <string>Spar can capture a display or region when you ask the active chat agent to review your screen.</string>
   <key>SUEnableAutomaticChecks</key>
   <false/>
 </dict>
