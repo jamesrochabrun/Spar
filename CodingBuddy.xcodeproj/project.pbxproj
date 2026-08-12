@@ -9,8 +9,8 @@
 /* Begin PBXBuildFile section */
 		BB0000012FA0000700000007 /* ApprovalServerKit in Frameworks */ = {isa = PBXBuildFile; productRef = BB0000012FA0000800000008 /* ApprovalServerKit */; };
 		CC0000010000000100000001 /* CodingBuddyKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000010000000200000002 /* CodingBuddyKit */; };
-		CC0000020000000100000001 /* InterviewKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000020000000200000002 /* InterviewKit */; };
 		CC0000010000000300000003 /* CodingBuddyChat in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000010000000400000004 /* CodingBuddyChat */; };
+		CC0000020000000100000001 /* InterviewKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000020000000200000002 /* InterviewKit */; };
 		FA0000010000000100000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000010000000200000002 /* Sparkle */; };
 /* End PBXBuildFile section */
 
@@ -442,6 +442,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CQ45U4X9K3;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -473,6 +474,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CQ45U4X9K3;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -619,13 +621,13 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/CodingBuddyKit;
 		};
-		CC0000020000000700000007 /* XCLocalSwiftPackageReference "Packages/InterviewKit" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/InterviewKit;
-		};
 		CC0000010000000800000008 /* XCLocalSwiftPackageReference "Packages/CodingBuddyChat" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/CodingBuddyChat;
+		};
+		CC0000020000000700000007 /* XCLocalSwiftPackageReference "Packages/InterviewKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/InterviewKit;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -658,13 +660,13 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = CodingBuddyKit;
 		};
-		CC0000020000000200000002 /* InterviewKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = InterviewKit;
-		};
 		CC0000010000000400000004 /* CodingBuddyChat */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = CodingBuddyChat;
+		};
+		CC0000020000000200000002 /* InterviewKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = InterviewKit;
 		};
 		FA0000010000000200000002 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;

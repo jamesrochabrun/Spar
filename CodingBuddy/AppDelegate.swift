@@ -38,12 +38,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let controller = WindowController(
       appState: appState,
       chatService: chatService,
+      voiceController: voiceController,
       isFloatingChatBarEnabled: isFloatingChatBarEnabled
     )
     self.windowController = controller
     controller.showCanvas()
     configureStatusItem()
-    voiceController.start()
     Task {
       await chatService.initialize()
     }
@@ -134,14 +134,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       menu.addItem(openChatBarItem)
     }
 
-    let voiceItem = NSMenuItem(
-      title: "Show Voice",
-      action: #selector(toggleVoiceHUD(_:)),
-      keyEquivalent: ""
-    )
-    voiceItem.target = self
-    menu.addItem(voiceItem)
-
     menu.addItem(NSMenuItem.separator())
 
     let checkForUpdatesItem = NSMenuItem(
@@ -197,8 +189,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     softwareUpdater.checkForUpdates()
   }
 
-  @objc func toggleVoiceHUD(_ sender: Any?) {
-    voiceController.toggleHUD()
+  @objc func toggleVoiceCoach(_ sender: Any?) {
+    voiceController.requestConversationToggle()
   }
 
   @objc private func quitApp(_ sender: Any?) {

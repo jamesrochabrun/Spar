@@ -1,5 +1,4 @@
 import AgentHubVoice
-import AgentHubVoicePanel
 import SwiftUI
 
 public struct CodingBuddyVoiceSettingsSections: View {
@@ -52,7 +51,6 @@ public struct CodingBuddyVoiceSettingsSections: View {
         screenCaptureEnabled: $screenCaptureEnabled,
         allowBargeIn: $allowBargeIn,
         showTranscript: $showTranscript,
-        registrationError: controller.controlCoordinator.registrationErrorMessage,
         onShowOnboarding: showOnboarding
       )
 
@@ -71,8 +69,7 @@ public struct CodingBuddyVoiceSettingsSections: View {
       controller.setEnabled(enabled)
     }
     .sheet(isPresented: $showsOnboarding) {
-      VoiceOnboardingView(
-        configuration: .codingBuddy,
+      CodingBuddyVoiceOnboardingView(
         onDismiss: dismissOnboarding
       )
     }

@@ -52,6 +52,8 @@ public struct ChatScreen: View {
     columnVisibility: Binding<NavigationSplitViewVisibility>,
     triggerInputFocus: Binding<Bool> = .constant(false),
     uiConfiguration: UIConfiguration = .default,
+    voiceCoachAction: ChatComposerVoiceCoachAction? = nil,
+    dictationAction: ChatComposerDictationAction? = nil,
     attachmentImportService: any ChatAttachmentImportService = DefaultChatAttachmentImportService(),
     attachmentProcessingService: any AttachmentProcessingService = AttachmentProcessor()
   ) {
@@ -62,6 +64,8 @@ public struct ChatScreen: View {
     _columnVisibility = columnVisibility
     _triggerInputFocus = triggerInputFocus
     self.uiConfiguration = uiConfiguration
+    self.voiceCoachAction = voiceCoachAction
+    self.dictationAction = dictationAction
     self.attachmentImportService = attachmentImportService
     self.attachmentProcessingService = attachmentProcessingService
   }
@@ -85,6 +89,8 @@ public struct ChatScreen: View {
   /// Configuration object defining UI appearance and behavior
   /// Includes settings like app name, theme, and feature toggles
   let uiConfiguration: UIConfiguration
+  let voiceCoachAction: ChatComposerVoiceCoachAction?
+  let dictationAction: ChatComposerDictationAction?
 
   let attachmentImportService: any ChatAttachmentImportService
   let attachmentProcessingService: any AttachmentProcessingService
@@ -136,6 +142,8 @@ public struct ChatScreen: View {
         uiConfiguration: uiConfiguration,
         placeholder: "Message \(uiConfiguration.appName)...",
         triggerFocus: $triggerInputFocus,
+        voiceCoachAction: voiceCoachAction,
+        dictationAction: dictationAction,
         attachmentImportService: attachmentImportService,
         attachmentProcessingService: attachmentProcessingService)
     }

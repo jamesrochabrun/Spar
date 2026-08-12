@@ -30,6 +30,7 @@ public final class VoiceHUDViewModel {
   private let host: any VoiceHUDHost
   private let engine: RealtimeVoiceEngine
   private let defaults: UserDefaults
+  private var conversationTranscriptOffset = 0
 
   public init(
     host: any VoiceHUDHost,
@@ -130,6 +131,11 @@ public final class VoiceHUDViewModel {
     }
   }
 
+  public var sessionConversationTranscripts: [VoiceTranscriptEntry] {
+    let offset = min(conversationTranscriptOffset, engine.transcripts.count)
+    return Array(engine.transcripts.dropFirst(offset))
+  }
+
   public var errorMessage: String? {
     if let localErrorMessage {
       return localErrorMessage
@@ -170,6 +176,14 @@ public final class VoiceHUDViewModel {
   public func stopAllAudio() {
     dictationController?.cancel()
     engine.stop()
+  }
+
+  public func resetForTargetChange() {
+    stopAllAudio()
+    conversationTranscriptOffset = engine.transcripts.count
+    dictationTranscripts.removeAll()
+    localErrorMessage = nil
+    manualTargetId = nil
   }
 
   private func toggleDictation() async {

@@ -6,15 +6,11 @@ struct CodingBuddyVoiceBehaviorSettingsSection: View {
   @Binding var screenCaptureEnabled: Bool
   @Binding var allowBargeIn: Bool
   @Binding var showTranscript: Bool
-  let registrationError: String?
   let onShowOnboarding: () -> Void
 
   var body: some View {
     Section("Voice behavior") {
-      Toggle(
-        "Enable global shortcut (\(GlobalHotKey.voiceHUDDefault.displayString))",
-        isOn: $voiceEnabled
-      )
+      Toggle("Enable voice features", isOn: $voiceEnabled)
 
       Toggle("Automatically submit dictation", isOn: $autoSubmitDictation)
 
@@ -38,19 +34,14 @@ struct CodingBuddyVoiceBehaviorSettingsSection: View {
 
       Toggle(isOn: $showTranscript) {
         VStack(alignment: .leading, spacing: 2) {
-          Text("Show transcript text")
-          Text("Replace the voice visualizer with the live conversation transcript")
+          Text("Open transcript automatically")
+          Text("Show the live voice transcript when a conversation starts")
             .font(.caption)
             .foregroundStyle(.secondary)
         }
       }
 
       Button("Show voice tour…", action: onShowOnboarding)
-
-      if let registrationError {
-        Label(registrationError, systemImage: "exclamationmark.triangle.fill")
-          .foregroundStyle(.orange)
-      }
     }
   }
 }

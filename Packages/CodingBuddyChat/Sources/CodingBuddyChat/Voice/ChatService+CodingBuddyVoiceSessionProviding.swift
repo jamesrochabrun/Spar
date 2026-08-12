@@ -4,7 +4,13 @@ import Foundation
 
 extension ChatService: CodingBuddyVoiceSessionProviding {
   public var voiceSessionSnapshot: CodingBuddyVoiceSessionSnapshot? {
-    guard isInitialized, let chatViewModel else { return nil }
+    guard isInitialized,
+          let chatViewModel,
+          currentSessionId != nil
+            || interviewSession.activeAttempt != nil
+            || currentKnowledgeStudySpaceID != nil else {
+      return nil
+    }
 
     let question = interviewSession.activeQuestion
     let mode = currentMode ?? interviewSession.activeAttempt?.mode ?? .practice

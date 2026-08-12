@@ -15,11 +15,9 @@ struct WindowControllerTests {
   @Test
   func capsuleUsesPanelAndCanvasUsesNativeWindow() {
     let appState = AppState()
-    let controller = WindowController(
+    let controller = makeWindowController(
       appState: appState,
-      chatService: ChatService(),
-      isFloatingChatBarEnabled: true,
-      observesPhaseChanges: false
+      isFloatingChatBarEnabled: true
     )
 
     #expect(controller.capsulePanel.styleMask.contains(.nonactivatingPanel))
@@ -42,11 +40,9 @@ struct WindowControllerTests {
   func closingCanvasWindowReturnsToCapsuleWithoutClosingWindow() {
     let appState = AppState()
     appState.phase = .canvas
-    let controller = WindowController(
+    let controller = makeWindowController(
       appState: appState,
-      chatService: ChatService(),
-      isFloatingChatBarEnabled: true,
-      observesPhaseChanges: false
+      isFloatingChatBarEnabled: true
     )
 
     let shouldClose = controller.windowShouldClose(controller.canvasWindow)
@@ -58,11 +54,9 @@ struct WindowControllerTests {
   @Test
   func hideCapsuleOrdersOutPanel() {
     let appState = AppState()
-    let controller = WindowController(
+    let controller = makeWindowController(
       appState: appState,
-      chatService: ChatService(),
-      isFloatingChatBarEnabled: true,
-      observesPhaseChanges: false
+      isFloatingChatBarEnabled: true
     )
     controller.showCapsule()
     #expect(controller.capsulePanel.isVisible)
@@ -74,11 +68,9 @@ struct WindowControllerTests {
   @Test
   func showCanvasOrdersOutCapsuleAndShowsCanvasWindow() {
     let appState = AppState()
-    let controller = WindowController(
+    let controller = makeWindowController(
       appState: appState,
-      chatService: ChatService(),
-      isFloatingChatBarEnabled: true,
-      observesPhaseChanges: false
+      isFloatingChatBarEnabled: true
     )
     defer {
       controller.canvasWindow.orderOut(nil)
@@ -98,11 +90,7 @@ struct WindowControllerTests {
   @Test
   func showCapsuleFallsBackToCanvasWhenFloatingChatBarIsDisabled() {
     let appState = AppState()
-    let controller = WindowController(
-      appState: appState,
-      chatService: ChatService(),
-      observesPhaseChanges: false
-    )
+    let controller = makeWindowController(appState: appState)
     defer {
       controller.canvasWindow.orderOut(nil)
       controller.capsulePanel.orderOut(nil)
@@ -119,11 +107,7 @@ struct WindowControllerTests {
   func closingCanvasWindowDoesNotReturnToCapsuleWhenFloatingChatBarIsDisabled() {
     let appState = AppState()
     appState.phase = .canvas
-    let controller = WindowController(
-      appState: appState,
-      chatService: ChatService(),
-      observesPhaseChanges: false
-    )
+    let controller = makeWindowController(appState: appState)
 
     let shouldClose = controller.windowShouldClose(controller.canvasWindow)
 
@@ -136,13 +120,29 @@ struct WindowControllerTests {
     let appState = AppState()
     appState.promptText = "Build a dashboard"
 
+    let chatService = ChatService()
     let view = MainContentView(
       appState: appState,
       initialPrompt: appState.promptText,
-      chatService: ChatService()
+      chatService: chatService,
+      voiceController: CodingBuddyVoiceController(session: chatService)
     )
     appState.promptText = "Edited later"
 
     #expect(view.initialPrompt == "Build a dashboard")
+  }
+
+  private func makeWindowController(
+    appState: AppState,
+    isFloatingChatBarEnabled: Bool = false
+  ) -> WindowController {
+    let chatService = ChatService()
+    return WindowController(
+      appState: appState,
+      chatService: chatService,
+      voiceController: CodingBuddyVoiceController(session: chatService),
+      isFloatingChatBarEnabled: isFloatingChatBarEnabled,
+      observesPhaseChanges: false
+    )
   }
 }

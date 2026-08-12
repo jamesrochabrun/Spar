@@ -18,12 +18,15 @@ struct ChatInputView: View {
   @Binding var viewModel: ChatViewModel
   let contextManager: ContextManager
   let uiConfiguration: UIConfiguration
+  let voiceCoachAction: ChatComposerVoiceCoachAction?
+  let dictationAction: ChatComposerDictationAction?
   private let attachmentImportService: any ChatAttachmentImportService
   private let attachmentProcessingService: any AttachmentProcessingService
   
   @Environment(GlobalPreferencesStorage.self) private var globalPreferences
   @Environment(AppearanceSettings.self) private var appearanceSettings
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   
   @FocusState private var isFocused: Bool
   let placeholder: String
@@ -61,6 +64,8 @@ struct ChatInputView: View {
     uiConfiguration: UIConfiguration = .default,
     placeholder: String = "Message...",
     triggerFocus: Binding<Bool> = .constant(false),
+    voiceCoachAction: ChatComposerVoiceCoachAction? = nil,
+    dictationAction: ChatComposerDictationAction? = nil,
     attachmentImportService: any ChatAttachmentImportService = DefaultChatAttachmentImportService(),
     attachmentProcessingService: any AttachmentProcessingService = AttachmentProcessor())
   {
@@ -69,6 +74,8 @@ struct ChatInputView: View {
     self.contextManager = contextManager
     self.uiConfiguration = uiConfiguration
     self.placeholder = placeholder
+    self.voiceCoachAction = voiceCoachAction
+    self.dictationAction = dictationAction
     _triggerFocus = triggerFocus
     self.attachmentImportService = attachmentImportService
     self.attachmentProcessingService = attachmentProcessingService
@@ -148,11 +155,26 @@ struct ChatInputView: View {
               .padding(.horizontal, 8)
               .padding(.top, 4)
           }
-          HStack(alignment: .bottom, spacing: 8) {
+          HStack(alignment: .bottom, spacing: 6) {
             attachmentButton
             textEditor
+            if let voiceCoachAction {
+              ChatComposerVoiceCoachControl(configuration: voiceCoachAction)
+            }
+            if let dictationAction, voiceCoachAction?.state.isActive != true {
+              ChatComposerDictationButton(configuration: dictationAction)
+                .transition(
+                  reduceMotion
+                    ? .opacity
+                    : .scale(scale: 0.82).combined(with: .opacity)
+                )
+            }
             actionButton
           }
+          .animation(
+            reduceMotion ? nil : .snappy(duration: 0.18),
+            value: voiceCoachAction?.state.isActive == true
+          )
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -220,7 +242,15 @@ extension ChatInputView {
       Image(systemName: "paperclip")
         .font(.system(size: 13, weight: .medium))
         .foregroundStyle(CodingBuddyChatRuntimeStyle.tertiaryText(for: colorScheme))
-        .frame(width: 28, height: 28)
+        .frame(width: 30, height: 30)
+        .background(
+          CodingBuddyChatRuntimeStyle.composerControlBackground(for: colorScheme),
+          in: Circle()
+        )
+        .overlay {
+          Circle()
+            .stroke(CodingBuddyChatRuntimeStyle.border(for: colorScheme), lineWidth: 1)
+        }
     }
     .buttonStyle(.plain)
     .help("Attach files")
@@ -246,7 +276,8 @@ extension ChatInputView {
         .font(.system(size: 12, weight: .bold))
         .foregroundStyle(CodingBuddyChatRuntimeStyle.userText(for: colorScheme))
         .frame(width: 30, height: 30)
-        .background(CodingBuddyChatRuntimeStyle.userBubble(for: colorScheme), in: RoundedRectangle(cornerRadius: CodingBuddyChatRuntimeStyle.cardRadius))
+        .background(CodingBuddyChatRuntimeStyle.userBubble(for: colorScheme), in: Circle())
+        .contentShape(Circle())
     }
     .buttonStyle(.plain)
     .help("Stop response")
@@ -263,10 +294,20 @@ extension ChatInputView {
         .frame(width: 30, height: 30)
         .background(
           isTextEmpty
-            ? CodingBuddyChatRuntimeStyle.subtleCardBackground(for: colorScheme)
+            ? CodingBuddyChatRuntimeStyle.composerControlBackground(for: colorScheme)
             : CodingBuddyChatRuntimeStyle.userBubble(for: colorScheme),
-          in: RoundedRectangle(cornerRadius: CodingBuddyChatRuntimeStyle.cardRadius)
+          in: Circle()
         )
+        .overlay {
+          Circle()
+            .stroke(
+              isTextEmpty
+                ? CodingBuddyChatRuntimeStyle.border(for: colorScheme)
+                : CodingBuddyChatRuntimeStyle.userBubble(for: colorScheme),
+              lineWidth: 1
+            )
+        }
+        .contentShape(Circle())
     }
     .buttonStyle(.plain)
     .disabled(isTextEmpty)

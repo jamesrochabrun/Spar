@@ -15,6 +15,7 @@ struct MainContentView: View {
   @Bindable var appState: AppState
   let initialPrompt: String
   let chatService: ChatService
+  let voiceController: CodingBuddyVoiceController
 
   @State private var sidebarViewModel: SidebarViewModel?
   @State private var panelLayoutState: CanvasPanelLayoutState = .allPanels
@@ -27,7 +28,10 @@ struct MainContentView: View {
   @State private var isChatInputFocusRequested = false
   @State private var isWhiteboardCreationRequested = false
   @State private var isLessonLibraryPresented = false
+  @State private var isVoiceTranscriptPresented = false
+  @State private var isVoiceOnboardingPresented = false
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   private let chatPanelWidth: CGFloat = 380
   private let sidebarWidth: CGFloat = 340
@@ -72,6 +76,9 @@ struct MainContentView: View {
 
             ChatPanelView(
               chatService: chatService,
+              voiceController: voiceController,
+              isVoiceTranscriptPresented: isVoiceTranscriptPresented,
+              onVoiceTranscriptToggle: toggleVoiceTranscript,
               triggerInputFocus: $isChatInputFocusRequested
             )
               .frame(maxHeight: .infinity)
@@ -160,6 +167,31 @@ struct MainContentView: View {
           chatService.sendMessage(trimmedPrompt, context: nil, hiddenContext: nil)
         }
       }
+    }
+    .onChange(of: voiceController.onboardingPresentationRequest) { _, _ in
+      isVoiceOnboardingPresented = true
+    }
+    .onChange(of: voiceController.conversationStatus) { _, status in
+      handleVoiceStatusChange(status)
+    }
+    .onChange(of: chatService.currentSessionId) { _, _ in
+      isVoiceTranscriptPresented = false
+      voiceController.handleSessionChange()
+    }
+    .onChange(of: contentMode) { _, mode in
+      if mode == .dashboard {
+        isVoiceTranscriptPresented = false
+        voiceController.stop()
+      }
+    }
+    .onDisappear {
+      voiceController.stop()
+    }
+    .sheet(isPresented: $isVoiceOnboardingPresented) {
+      CodingBuddyVoiceOnboardingView(
+        onStartVoiceCoach: voiceController.toggleConversation,
+        onDismiss: dismissVoiceOnboarding
+      )
     }
   }
 
@@ -343,6 +375,22 @@ struct MainContentView: View {
       Rectangle()
         .fill(.quaternary)
         .frame(height: 1)
+
+      if isVoiceTranscriptPresented {
+        CodingBuddyVoiceTranscriptStrip(
+          controller: voiceController,
+          onClose: hideVoiceTranscript
+        )
+        .transition(
+          reduceMotion
+            ? .opacity
+            : .move(edge: .top).combined(with: .opacity)
+        )
+
+        Rectangle()
+          .fill(.quaternary)
+          .frame(height: 1)
+      }
 
       if isDrillRunActive {
         DrillRunStripView(
@@ -630,6 +678,37 @@ struct MainContentView: View {
 
   private func createSystemDesignWhiteboard() {
     isWhiteboardCreationRequested = chatService.requestWhiteboard()
+  }
+
+  private func handleVoiceStatusChange(
+    _ status: CodingBuddyVoiceConversationStatus
+  ) {
+    if case .failed = status {
+      setVoiceTranscriptPresented(true)
+    } else if status == .connecting,
+              voiceController.shouldAutomaticallyShowTranscript {
+      setVoiceTranscriptPresented(true)
+    } else if !status.isActive {
+      setVoiceTranscriptPresented(false)
+    }
+  }
+
+  private func hideVoiceTranscript() {
+    setVoiceTranscriptPresented(false)
+  }
+
+  private func toggleVoiceTranscript() {
+    setVoiceTranscriptPresented(!isVoiceTranscriptPresented)
+  }
+
+  private func setVoiceTranscriptPresented(_ isPresented: Bool) {
+    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+      isVoiceTranscriptPresented = isPresented
+    }
+  }
+
+  private func dismissVoiceOnboarding() {
+    isVoiceOnboardingPresented = false
   }
 }
 
