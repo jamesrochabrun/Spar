@@ -1,4 +1,5 @@
 import AgentHubVoice
+import CodingBuddyKit
 import Foundation
 
 @MainActor
@@ -57,7 +58,7 @@ final class CodingBuddyVoiceToolCatalog {
     VoiceTool(
       name: "list_sessions",
       description: """
-        Return CodingBuddy's currently selected chat session. The target ID is
+        Return \(AppBrand.name)'s currently selected chat session. The target ID is
         stable while the user switches sessions, so every voice prompt stays
         synchronized with the chat that is visible in the app.
         """,
@@ -101,7 +102,7 @@ final class CodingBuddyVoiceToolCatalog {
     VoiceTool(
       name: "read_session_response",
       description: """
-        Read the latest response from the active CodingBuddy chat agent. Use
+        Read the latest response from the active \(AppBrand.name) chat agent. Use
         its actual content when answering; never invent a result or tell the
         user to look at the chat instead.
         """,
@@ -129,7 +130,7 @@ final class CodingBuddyVoiceToolCatalog {
     VoiceTool(
       name: "read_session_history",
       description: """
-        Read recent user and assistant turns from the active CodingBuddy chat.
+        Read recent user and assistant turns from the active \(AppBrand.name) chat.
         Use this for earlier context; use read_session_response for only the
         latest completed answer.
         """,

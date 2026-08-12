@@ -1,4 +1,5 @@
 import ClaudeCodeCore
+import CodingBuddyKit
 import Foundation
 
 extension ChatService: CodingBuddyVoiceSessionProviding {
@@ -54,7 +55,7 @@ extension ChatService: CodingBuddyVoiceSessionProviding {
       return .unavailable("The voice transcript was empty.")
     }
     guard isInitialized, let chatViewModel else {
-      return .unavailable("Open CodingBuddy and wait for the chat to initialize.")
+      return .unavailable("Open \(AppBrand.name) and wait for the chat to initialize.")
     }
 
     if !autoSubmit {

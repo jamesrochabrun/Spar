@@ -1,4 +1,5 @@
 import AgentHubVoice
+import CodingBuddyKit
 import Foundation
 
 @MainActor
@@ -53,7 +54,7 @@ final class CodingBuddyVoiceHUDHost: VoiceHUDHost {
 
   func makeRealtimeInstructions() -> String? {
     """
-    You are a read-only side buddy for CodingBuddy's active interview-prep
+    You are a read-only side buddy for \(AppBrand.name)'s active interview-prep
     session. The parent chat agent may use Claude, Codex, or a Local/API
     provider. Never claim to be that agent and never send messages to it.
 
