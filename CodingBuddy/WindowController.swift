@@ -15,6 +15,7 @@ final class WindowController: NSObject, WindowControlling, NSWindowDelegate {
 
   private let appState: AppState
   private let chatService: ChatService
+  private let voiceController: CodingBuddyVoiceController
   private let isFloatingChatBarEnabled: Bool
   private var storedCanvasFrame: NSRect?
   private var transitionGeneration = 0
@@ -22,11 +23,13 @@ final class WindowController: NSObject, WindowControlling, NSWindowDelegate {
   init(
     appState: AppState,
     chatService: ChatService,
+    voiceController: CodingBuddyVoiceController,
     isFloatingChatBarEnabled: Bool = false,
     observesPhaseChanges: Bool = true
   ) {
     self.appState = appState
     self.chatService = chatService
+    self.voiceController = voiceController
     self.isFloatingChatBarEnabled = isFloatingChatBarEnabled
     self.capsulePanel = Self.makeCapsulePanel()
     self.canvasWindow = Self.makeCanvasWindow()
@@ -48,6 +51,7 @@ final class WindowController: NSObject, WindowControlling, NSWindowDelegate {
       return
     }
 
+    voiceController.stop()
     let frame = capsuleFrame()
     capsulePanel.setFrame(frame, display: true)
     capsulePanel.alphaValue = 1
@@ -112,6 +116,7 @@ final class WindowController: NSObject, WindowControlling, NSWindowDelegate {
       return
     }
 
+    voiceController.stop()
     let generation = nextTransitionGeneration()
     preserveCanvasFrameIfPossible()
 
@@ -146,6 +151,7 @@ final class WindowController: NSObject, WindowControlling, NSWindowDelegate {
 
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     guard sender === canvasWindow else { return true }
+    voiceController.stop()
     guard isFloatingChatBarEnabled else { return true }
 
     preserveCanvasFrameIfPossible()
@@ -213,7 +219,8 @@ final class WindowController: NSObject, WindowControlling, NSWindowDelegate {
       rootView: MainContentView(
         appState: appState,
         initialPrompt: appState.promptText,
-        chatService: chatService
+        chatService: chatService,
+        voiceController: voiceController
       )
     )
     hostingView.translatesAutoresizingMaskIntoConstraints = true

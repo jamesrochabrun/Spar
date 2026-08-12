@@ -59,6 +59,10 @@ enum CodingBuddyChatRuntimeStyle {
     EaselDesignSystem.Palette.subtleSurface(for: colorScheme)
   }
 
+  static func composerControlBackground(for colorScheme: ColorScheme) -> Color {
+    EaselDesignSystem.Palette.surfaceElevated(for: colorScheme)
+  }
+
   static func border(for colorScheme: ColorScheme, themeColors: ThemeColors = .current) -> Color {
     EaselDesignSystem.Palette.border(for: colorScheme)
   }
@@ -101,6 +105,9 @@ enum CodingBuddyChatRuntimeStyle {
   static let running = EaselDesignSystem.Palette.running
   static let failed = EaselDesignSystem.Palette.danger
   static let denied = EaselDesignSystem.Palette.warning
+  static let voiceMagicViolet = Color(hex: "#7A57F5")
+  static let voiceMagicBlue = Color(hex: "#339EFF")
+  static let voiceMagicMint = Color(hex: "#47D6BC")
 
   static func completedForeground(for colorScheme: ColorScheme, themeColors: ThemeColors = .current) -> Color {
     EaselDesignSystem.Palette.accentForeground(for: colorScheme)

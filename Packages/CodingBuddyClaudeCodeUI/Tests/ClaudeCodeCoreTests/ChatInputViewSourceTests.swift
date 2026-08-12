@@ -33,6 +33,55 @@ final class ChatInputViewSourceTests: XCTestCase {
     XCTAssertTrue(inputSource.contains("triggerFocus = false"))
   }
 
+  func testComposerActionsUseCircularContainers() throws {
+    let inputSource = try sourceContents("Sources/ClaudeCodeCore/UI/ChatInputView.swift")
+    let dictationSource = try sourceContents(
+      "Sources/ClaudeCodeCore/UI/ChatComposerDictationButton.swift"
+    )
+
+    XCTAssertTrue(inputSource.contains("in: Circle()"))
+    XCTAssertTrue(dictationSource.contains(".background(backgroundStyle, in: Circle())"))
+    XCTAssertTrue(inputSource.contains(".stroke(CodingBuddyChatRuntimeStyle.border"))
+    XCTAssertTrue(dictationSource.contains(".stroke(borderStyle"))
+  }
+
+  func testTranscriptionUsesProgressInsteadOfWaveform() throws {
+    let source = try sourceContents(
+      "Sources/ClaudeCodeCore/UI/ChatComposerDictationButton.swift"
+    )
+
+    XCTAssertTrue(source.contains("ProgressView()"))
+    XCTAssertFalse(source.contains("\"waveform\""))
+  }
+
+  func testVoiceCoachUsesAMagicalComposerOrb() throws {
+    let inputSource = try sourceContents("Sources/ClaudeCodeCore/UI/ChatInputView.swift")
+    let controlSource = try sourceContents(
+      "Sources/ClaudeCodeCore/UI/ChatComposerVoiceCoachControl.swift"
+    )
+
+    XCTAssertTrue(inputSource.contains("ChatComposerVoiceCoachControl"))
+    XCTAssertTrue(controlSource.contains("LinearGradient("))
+    XCTAssertTrue(controlSource.contains("Image(systemName: \"sparkle\")"))
+    XCTAssertTrue(controlSource.contains("accessibilityReduceMotion"))
+    XCTAssertTrue(controlSource.contains("configuration.muteAction"))
+    XCTAssertTrue(controlSource.contains("configuration.endAction"))
+  }
+
+  func testDictationIsHiddenWhileVoiceCoachIsActive() throws {
+    let source = try sourceContents("Sources/ClaudeCodeCore/UI/ChatInputView.swift")
+
+    XCTAssertTrue(
+      source.contains(
+        "if let dictationAction, voiceCoachAction?.state.isActive != true"
+      )
+    )
+    XCTAssertTrue(
+      source.contains("value: voiceCoachAction?.state.isActive == true")
+    )
+    XCTAssertTrue(source.contains("accessibilityReduceMotion"))
+  }
+
   private func sourceContents(_ relativePath: String) throws -> String {
     let testsDirectory = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()

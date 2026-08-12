@@ -9,15 +9,24 @@ import SwiftUI
 
 public struct ChatPanelView: View {
   let chatService: ChatService
+  let voiceController: CodingBuddyVoiceController?
+  let isVoiceTranscriptPresented: Bool
+  let onVoiceTranscriptToggle: @MainActor () -> Void
 
   @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
   @Binding private var triggerInputFocus: Bool
 
   public init(
     chatService: ChatService,
+    voiceController: CodingBuddyVoiceController? = nil,
+    isVoiceTranscriptPresented: Bool = false,
+    onVoiceTranscriptToggle: @escaping @MainActor () -> Void = {},
     triggerInputFocus: Binding<Bool> = .constant(false)
   ) {
     self.chatService = chatService
+    self.voiceController = voiceController
+    self.isVoiceTranscriptPresented = isVoiceTranscriptPresented
+    self.onVoiceTranscriptToggle = onVoiceTranscriptToggle
     _triggerInputFocus = triggerInputFocus
   }
 
@@ -46,7 +55,12 @@ public struct ChatPanelView: View {
             inputCornerRadius: 8.0,
             useMaterialInputBackground: false,
             showWelcomeRow: false
-          )
+          ),
+          voiceCoachAction: voiceController?.chatComposerVoiceCoachAction(
+            isTranscriptPresented: isVoiceTranscriptPresented,
+            onTranscriptToggle: onVoiceTranscriptToggle
+          ),
+          dictationAction: voiceController?.chatComposerDictationAction
         )
         .id(ObjectIdentifier(vm))
         .environment(globalPreferences)

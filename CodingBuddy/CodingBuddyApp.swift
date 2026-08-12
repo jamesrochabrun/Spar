@@ -26,10 +26,11 @@ struct CodingBuddyApp: App {
         }
       }
       CommandGroup(after: .sidebar) {
-        Button("Show Voice") {
-          appDelegate.toggleVoiceHUD(nil)
+        Button("Toggle Voice Coach") {
+          appDelegate.toggleVoiceCoach(nil)
         }
         .keyboardShortcut("v", modifiers: [.command, .option])
+        .disabled(!appDelegate.voiceController.canUseVoice)
       }
     }
   }
