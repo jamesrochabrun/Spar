@@ -1,0 +1,289 @@
+import Foundation
+import Testing
+@testable import AgentHubVoice
+
+struct RealtimeSessionConfigurationBuilderTests {
+  @Test
+  func buildsAudioSemanticVADAndFunctionTools() throws {
+    let tool = VoiceTool(
+      name: "list_sessions",
+      description: "Lists sessions",
+      parameters: ["type": "object"]
+    ) { _ in
+      "{}"
+    }
+    let configuration = RealtimeSessionConfigurationBuilder.make(
+      settings: VoiceEngineSettings(
+        model: "gpt-realtime",
+        voiceName: "marin",
+        vadEagerness: "high",
+        dictationModel: "whisper-1"
+      ),
+      tools: VoiceToolRegistry(tools: [tool])
+    )
+
+    let data = try JSONEncoder().encode(configuration)
+    let object = try #require(
+      JSONSerialization.jsonObject(with: data) as? [String: Any]
+    )
+    let audio = try #require(object["audio"] as? [String: Any])
+    let input = try #require(audio["input"] as? [String: Any])
+    let output = try #require(audio["output"] as? [String: Any])
+    let turnDetection = try #require(input["turn_detection"] as? [String: Any])
+    let tools = try #require(object["tools"] as? [[String: Any]])
+
+    #expect(object["output_modalities"] as? [String] == ["audio"])
+    #expect(output["voice"] as? String == "marin")
+    #expect(turnDetection["type"] as? String == "semantic_vad")
+    #expect(turnDetection["eagerness"] as? String == "high")
+    #expect(tools.first?["name"] as? String == "list_sessions")
+    #expect(
+      RealtimeSessionConfigurationBuilder.instructions.contains(
+        "If the language is unclear, use English."
+      )
+    )
+  }
+
+  @Test
+  func baseInstructionsEnforceProviderNeutralSessionDiscipline() {
+    let instructions = RealtimeSessionConfigurationBuilder.instructions
+
+    #expect(instructions.contains("call list_sessions"))
+    #expect(instructions.contains("Never invent"))
+    #expect(!instructions.contains("Claude approval"))
+  }
+
+  @Test
+  func pinnedLanguageShapesInstructionsTranscriptionAndBargeIn() throws {
+    let configuration = RealtimeSessionConfigurationBuilder.make(
+      settings: VoiceEngineSettings(
+        language: "es",
+        allowBargeIn: false
+      ),
+      tools: VoiceToolRegistry(tools: [])
+    )
+
+    let data = try JSONEncoder().encode(configuration)
+    let object = try #require(
+      JSONSerialization.jsonObject(with: data) as? [String: Any]
+    )
+    let audio = try #require(object["audio"] as? [String: Any])
+    let input = try #require(audio["input"] as? [String: Any])
+    let transcription = try #require(input["transcription"] as? [String: Any])
+    let turnDetection = try #require(input["turn_detection"] as? [String: Any])
+    let instructions = try #require(object["instructions"] as? String)
+
+    #expect(transcription["language"] as? String == "es")
+    #expect(turnDetection["interrupt_response"] as? Bool == false)
+    #expect(instructions.contains("Always speak and respond in Spanish"))
+    #expect(instructions.contains("Never switch languages"))
+    // The pin must REPLACE the follow-the-user's-language directive — sending
+    // both contradictory rules lets background audio flip the reply language.
+    #expect(
+      !instructions.contains("Reply in the language the user is currently speaking")
+    )
+    #expect(!instructions.contains("If the language is unclear, use English."))
+    // Pinning must not drop the provider-neutral session discipline rules.
+    #expect(instructions.contains("call list_sessions"))
+    #expect(!instructions.contains("Claude approval"))
+  }
+
+  @Test
+  func automaticLanguageKeepsFollowTheUserBehavior() {
+    let instructions = RealtimeSessionConfigurationBuilder.instructions(
+      for: VoiceToolRegistry(tools: []),
+      language: nil
+    )
+
+    #expect(!instructions.contains("Never switch languages mid-conversation."))
+    #expect(instructions.contains("Reply in the language the user is currently speaking."))
+  }
+
+  @Test
+  func approvalInstructionsOnlyAppearWithApprovalTool() {
+    let approvalTool = VoiceTool(
+      name: "approve_pending_tool",
+      description: "Approves pending work",
+      parameters: ["type": "object"]
+    ) { _ in
+      "{}"
+    }
+
+    let withApproval = RealtimeSessionConfigurationBuilder.instructions(
+      for: VoiceToolRegistry(tools: [approvalTool])
+    )
+    #expect(withApproval.contains("Claude approval"))
+    #expect(withApproval.contains("explicit confirmation"))
+
+    let withoutApproval = RealtimeSessionConfigurationBuilder.instructions(
+      for: VoiceToolRegistry(tools: [])
+    )
+    #expect(!withoutApproval.contains("Claude approval"))
+  }
+
+  @Test
+  func responseInstructionsOnlyAppearWithResponseTool() {
+    let responseTool = VoiceTool(
+      name: "read_session_response",
+      description: "Reads a response",
+      parameters: ["type": "object"]
+    ) { _ in
+      "{}"
+    }
+
+    let withResponse = RealtimeSessionConfigurationBuilder.instructions(
+      for: VoiceToolRegistry(tools: [responseTool])
+    )
+    #expect(withResponse.contains("concise spoken summary"))
+
+    let withoutResponse = RealtimeSessionConfigurationBuilder.instructions(
+      for: VoiceToolRegistry(tools: [])
+    )
+    #expect(!withoutResponse.contains("concise spoken summary"))
+  }
+
+  @Test
+  func screenCaptureInstructionsOnlyAppearWithTheCaptureTool() {
+    let captureTool = VoiceTool(
+      name: "capture_screen",
+      description: "Captures",
+      parameters: ["type": "object"]
+    ) { _ in
+      "{}"
+    }
+    let otherTool = VoiceTool(
+      name: "list_sessions",
+      description: "Lists sessions",
+      parameters: ["type": "object"]
+    ) { _ in
+      "{}"
+    }
+
+    let withCapture = RealtimeSessionConfigurationBuilder.instructions(
+      for: VoiceToolRegistry(tools: [otherTool, captureTool])
+    )
+    #expect(withCapture.contains("call capture_screen"))
+    #expect(withCapture.contains("list_displays"))
+
+    let withoutCapture = RealtimeSessionConfigurationBuilder.instructions(
+      for: VoiceToolRegistry(tools: [otherTool])
+    )
+    #expect(!withoutCapture.contains("capture_screen"))
+  }
+
+  @Test
+  func sessionHistoryInstructionsOnlyAppearWithTheHistoryTool() {
+    let historyTool = VoiceTool(
+      name: "read_session_history",
+      description: "Reads history",
+      parameters: ["type": "object"]
+    ) { _ in
+      "{}"
+    }
+    let otherTool = VoiceTool(
+      name: "list_sessions",
+      description: "Lists sessions",
+      parameters: ["type": "object"]
+    ) { _ in
+      "{}"
+    }
+
+    let withHistory = RealtimeSessionConfigurationBuilder.instructions(
+      for: VoiceToolRegistry(tools: [otherTool, historyTool])
+    )
+    #expect(withHistory.contains("read_session_history"))
+
+    let withoutHistory = RealtimeSessionConfigurationBuilder.instructions(
+      for: VoiceToolRegistry(tools: [otherTool])
+    )
+    #expect(!withoutHistory.contains("read_session_history"))
+  }
+
+  @Test
+  func sessionContextIsAppendedWithStalenessWarningWhenPresent() {
+    let context = "2 sessions:\n- Fix login (claude, agenthub, Thinking)"
+
+    let withContext = RealtimeSessionConfigurationBuilder.instructions(
+      for: VoiceToolRegistry(tools: []),
+      sessionContext: context
+    )
+    #expect(withContext.contains("Session snapshot"))
+    #expect(withContext.contains("may be stale"))
+    #expect(withContext.contains("Fix login (claude, agenthub, Thinking)"))
+    #expect(withContext.hasSuffix(context))
+
+    let withoutContext = RealtimeSessionConfigurationBuilder.instructions(
+      for: VoiceToolRegistry(tools: []),
+      sessionContext: "   \n"
+    )
+    #expect(!withoutContext.contains("Session snapshot"))
+
+    let nilContext = RealtimeSessionConfigurationBuilder.instructions(
+      for: VoiceToolRegistry(tools: [])
+    )
+    #expect(!nilContext.contains("Session snapshot"))
+  }
+
+  @Test
+  func makeThreadsSessionContextIntoConfigurationInstructions() throws {
+    let configuration = RealtimeSessionConfigurationBuilder.make(
+      settings: VoiceEngineSettings(),
+      tools: VoiceToolRegistry(tools: []),
+      sessionContext: "1 session:\n- Build (codex, repo, Idle)"
+    )
+
+    let data = try JSONEncoder().encode(configuration)
+    let object = try #require(
+      JSONSerialization.jsonObject(with: data) as? [String: Any]
+    )
+    let instructions = try #require(object["instructions"] as? String)
+    #expect(instructions.contains("- Build (codex, repo, Idle)"))
+  }
+
+  @Test
+  func appendsHostSpecificInstructions() throws {
+    let configuration = RealtimeSessionConfigurationBuilder.make(
+      settings: VoiceEngineSettings(),
+      tools: VoiceToolRegistry(tools: []),
+      additionalInstructions: "Route problem questions through send_prompt."
+    )
+
+    let data = try JSONEncoder().encode(configuration)
+    let object = try #require(
+      JSONSerialization.jsonObject(with: data) as? [String: Any]
+    )
+    let instructions = try #require(object["instructions"] as? String)
+    #expect(instructions.hasSuffix("Route problem questions through send_prompt."))
+  }
+
+  @Test
+  func worktreeTaskInstructionsOnlyAppearWithTheTaskTool() {
+    let taskTool = VoiceTool(
+      name: "create_worktree_tasks",
+      description: "Creates worktree tasks",
+      parameters: ["type": "object"]
+    ) { _ in
+      "{}"
+    }
+    let otherTool = VoiceTool(
+      name: "list_sessions",
+      description: "Lists sessions",
+      parameters: ["type": "object"]
+    ) { _ in
+      "{}"
+    }
+
+    let withTasks = RealtimeSessionConfigurationBuilder.instructions(
+      for: VoiceToolRegistry(tools: [otherTool, taskTool])
+    )
+    #expect(withTasks.contains("call create_worktree_tasks"))
+    #expect(withTasks.contains("launch_session never creates a worktree"))
+    #expect(withTasks.contains("omit repository_path"))
+    #expect(withTasks.contains("Never guess a repository"))
+
+    let withoutTasks = RealtimeSessionConfigurationBuilder.instructions(
+      for: VoiceToolRegistry(tools: [otherTool])
+    )
+    #expect(!withoutTasks.contains("repository_path"))
+  }
+}
