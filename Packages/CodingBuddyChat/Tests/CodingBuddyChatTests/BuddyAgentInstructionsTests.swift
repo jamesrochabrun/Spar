@@ -49,7 +49,7 @@ struct BuddyAgentInstructionsTests {
 
   @Test
   func questionPromptsRequireSelfContainedTypesForEveryProvider() {
-    for mode in SessionMode.allCases {
+    for mode in SessionMode.allCases where mode != .codingProject {
       let prefixes = BuddyAgentInstructions.prefixes(for: mode)
       for prompt in [prefixes.claude, prefixes.codex, prefixes.api] {
         #expect(prompt.contains("prompt_markdown"))
@@ -62,7 +62,7 @@ struct BuddyAgentInstructionsTests {
 
   @Test
   func everyProviderRequiresCleanCompilableWorkspaceSource() {
-    for mode in SessionMode.allCases {
+    for mode in SessionMode.allCases where mode != .codingProject {
       let prefixes = BuddyAgentInstructions.prefixes(for: mode)
       for prompt in [prefixes.claude, prefixes.codex, prefixes.api] {
         #expect(prompt.contains("starter file"))
@@ -80,7 +80,7 @@ struct BuddyAgentInstructionsTests {
 
   @Test
   func evaluationPromptsGradeReasoningAndIgnoreSyntaxEntirely() {
-    for mode in SessionMode.allCases {
+    for mode in SessionMode.allCases where mode != .codingProject {
       let prefixes = BuddyAgentInstructions.prefixes(for: mode)
       for prompt in [prefixes.claude, prefixes.codex, prefixes.api] {
         #expect(prompt.contains("editing process"))
@@ -99,6 +99,52 @@ struct BuddyAgentInstructionsTests {
       // — is exactly the nitpicking this rubric is meant to stop.
       #expect(!directive.contains("would not compile"))
     }
+  }
+
+  @Test
+  func codingProjectUsesPracticalGitBuildAndCollaborationRubric() {
+    let prefixes = BuddyAgentInstructions.prefixes(for: .codingProject)
+    let directive = BuddyAgentInstructions.evaluationDirective(mode: .codingProject)
+
+    for prompt in [prefixes.claude, prefixes.codex, prefixes.api, directive] {
+      #expect(prompt.contains("working_feature"))
+      #expect(prompt.contains("correctness_completeness"))
+      #expect(prompt.contains("code_quality"))
+      #expect(prompt.contains("codebase_navigation"))
+      #expect(prompt.contains("debugging_testing"))
+      #expect(prompt.contains("communication_collaboration"))
+      #expect(prompt.localizedCaseInsensitiveContains("git"))
+      #expect(prompt.contains("xcodebuild"))
+      #expect(prompt.localizedCaseInsensitiveContains("build"))
+      #expect(prompt.localizedCaseInsensitiveContains("failures") || prompt.localizedCaseInsensitiveContains("errors"))
+    }
+
+    #expect(!directive.contains("Syntax is out of scope"))
+  }
+
+  @Test
+  func codingProjectTreatsTheXcodeProjectAsStarterSource() {
+    let prefixes = BuddyAgentInstructions.prefixes(for: .codingProject)
+    for prompt in [prefixes.claude, prefixes.codex, prefixes.api] {
+      #expect(prompt.contains("Xcode project"))
+      #expect(prompt.contains("solution.swift"))
+      #expect(prompt.localizedCaseInsensitiveContains("read-only"))
+      #expect(prompt.contains("candidate") && prompt.contains("Xcode"))
+      #expect(prompt.contains("compiles before"))
+    }
+    #expect(prefixes.api.contains("do not paste the whole Xcode project"))
+  }
+
+  @Test
+  func codingProjectNeverLetsTheAgentEditAfterTheBaseline() {
+    let prefixes = BuddyAgentInstructions.prefixes(for: .codingProject)
+
+    for prompt in [prefixes.claude, prefixes.codex, prefixes.api] {
+      #expect(prompt.localizedCaseInsensitiveContains("read-only"))
+      #expect(prompt.contains("Git diff"))
+      #expect(prompt.contains("never") && prompt.contains("edit"))
+    }
+    #expect(prefixes.api.contains("even if asked for the full solution"))
   }
 
   @Test
@@ -121,7 +167,7 @@ struct BuddyAgentInstructionsTests {
 
   @Test
   func everyProviderImplementsAnExplicitlyRequestedFullSolution() {
-    for mode in SessionMode.allCases {
+    for mode in SessionMode.allCases where mode != .codingProject {
       let prefixes = BuddyAgentInstructions.prefixes(for: mode)
       for prompt in [prefixes.claude, prefixes.codex, prefixes.api] {
         #expect(prompt.contains("implement the full solution"))

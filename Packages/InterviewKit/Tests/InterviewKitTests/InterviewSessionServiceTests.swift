@@ -12,7 +12,7 @@ struct InterviewSessionServiceTests {
 
   private struct FixedWorkspaceManager: InterviewWorkspaceManaging {
     let path: String
-    func createWorkspace(slug: String) throws -> String { path }
+    func createWorkspace(slug: String, kind: InterviewWorkspaceKind) throws -> String { path }
     func deleteWorkspace(atPath path: String) throws {}
   }
 
@@ -115,6 +115,37 @@ struct InterviewSessionServiceTests {
 
     let stored = try await storage.attempt(id: attempt.id)
     #expect(stored?.status == .abandoned)
+  }
+
+  @Test
+  func discardRemovesAnAttemptThatFailedDuringPreparation() async throws {
+    let (service, storage, root) = makeService()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let attempt = try await service.beginAttempt(mode: .codingProject, provider: "codex")
+    await service.discardActiveAttempt()
+
+    #expect(service.activeAttempt == nil)
+    #expect(try await storage.attempt(id: attempt.id) == nil)
+  }
+
+  @Test
+  func timedWorkResetsThePersistedStartAfterProjectPreparation() async throws {
+    let (service, storage, root) = makeService()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let attempt = try await service.beginAttempt(
+      mode: .codingProject,
+      durationSeconds: 3_600,
+      provider: "codex"
+    )
+    try await Task.sleep(for: .milliseconds(10))
+    await service.startTimedWork()
+
+    let stored = try #require(try await storage.attempt(id: attempt.id))
+    #expect(stored.startedAt > attempt.startedAt)
+    let deadline = try #require(service.attemptDeadline)
+    #expect(abs(deadline.timeIntervalSince(stored.startedAt) - 3_600) < 0.01)
   }
 
   @Test

@@ -34,7 +34,7 @@ struct SpecializationPromptFactoryTests {
 
   @Test
   func iOSCodingModesDemandSwiftLanguageHint() {
-    for mode in [SessionMode.mockInterview, .drill, .practice] {
+    for mode in [SessionMode.mockInterview, .codingProject, .drill, .practice] {
       let full = SpecializationPromptFactory.sessionGuidance(.iOS, mode: mode)
       #expect(full.contains("\"swift\""))
       let compact = SpecializationPromptFactory.compactGuidance(.iOS, mode: mode)

@@ -31,11 +31,14 @@ struct ChatSessionContext {
 
 enum ChatServiceError: LocalizedError {
   case missingGlobalPreferences
+  case codingProjectWorkspaceUnavailable
 
   var errorDescription: String? {
     switch self {
     case .missingGlobalPreferences:
       return "Chat service preferences are not initialized."
+    case .codingProjectWorkspaceUnavailable:
+      return "\(AppBrand.name) could not create a workspace for the Xcode project."
     }
   }
 }
@@ -167,6 +170,7 @@ public final class ChatService: ChatServiceProtocol {
   private let persistentPreferencesManager: PersistentPreferencesManager
   private let mcpToolsDiscovery: MCPToolsDiscoveryService
   private let logger: ClaudeCodeLogger
+  private let codingProjectPreparer: any CodingProjectPreparing
   private var currentWorkspaceUsageTask: Task<Void, Never>?
   private var sessionContextsById: [String: ChatSessionContext] = [:]
   private var pendingSessionContextsByViewModelId: [ObjectIdentifier: ChatSessionContext] = [:]
@@ -193,6 +197,7 @@ public final class ChatService: ChatServiceProtocol {
     workspaceManager: (any InterviewWorkspaceManaging)? = nil,
     interviewSettings: BuddyInterviewSettings? = nil,
     knowledgeLibrary: KnowledgeLibraryService? = nil,
+    codingProjectPreparer: (any CodingProjectPreparing)? = nil,
     persistentPreferencesManager: PersistentPreferencesManager? = nil,
     mcpToolsDiscovery: MCPToolsDiscoveryService = MCPToolsDiscoveryService(),
     logger: ClaudeCodeLogger = ClaudeCodeLogger()
@@ -202,6 +207,7 @@ public final class ChatService: ChatServiceProtocol {
     self.interviewStorage = resolvedInterviewStorage
     self.interviewSettings = interviewSettings ?? BuddyInterviewSettings()
     self.knowledgeLibrary = knowledgeLibrary ?? KnowledgeLibraryService()
+    self.codingProjectPreparer = codingProjectPreparer ?? CodingProjectPreparationService()
     self.interviewSession = InterviewSessionService(
       storage: resolvedInterviewStorage,
       workspaceManager: workspaceManager ?? InterviewWorkspaceManager()
@@ -311,6 +317,8 @@ public final class ChatService: ChatServiceProtocol {
     public var provider: ChatProvider?
     public var knowledgeConfiguration: KnowledgeSessionConfiguration?
     public var studyPlanFocus: StudyPlanFocus?
+    public var codingProjectSource: CodingProjectSource?
+    public var codingProjectBrief: String?
 
     public init(
       mode: SessionMode,
@@ -321,7 +329,9 @@ public final class ChatService: ChatServiceProtocol {
       hintBudget: Int = 3,
       provider: ChatProvider? = nil,
       knowledgeConfiguration: KnowledgeSessionConfiguration? = nil,
-      studyPlanFocus: StudyPlanFocus? = nil
+      studyPlanFocus: StudyPlanFocus? = nil,
+      codingProjectSource: CodingProjectSource? = nil,
+      codingProjectBrief: String? = nil
     ) {
       self.mode = mode
       self.question = question
@@ -332,6 +342,8 @@ public final class ChatService: ChatServiceProtocol {
       self.provider = provider
       self.knowledgeConfiguration = knowledgeConfiguration
       self.studyPlanFocus = studyPlanFocus
+      self.codingProjectSource = codingProjectSource
+      self.codingProjectBrief = CodingProjectBrief.normalized(codingProjectBrief)
     }
   }
 
@@ -365,6 +377,27 @@ public final class ChatService: ChatServiceProtocol {
       return
     }
 
+    if request.mode == .codingProject {
+      guard let workspacePath = attempt.workspacePath else {
+        initError = ChatServiceError.codingProjectWorkspaceUnavailable
+        await interviewSession.discardActiveAttempt()
+        return
+      }
+
+      if case .imported(let sourceURL) = request.codingProjectSource ?? .generated {
+        do {
+          try await codingProjectPreparer.prepareImportedProject(
+            from: sourceURL,
+            in: URL(fileURLWithPath: workspacePath, isDirectory: true)
+          )
+        } catch {
+          initError = error
+          await interviewSession.discardActiveAttempt()
+          return
+        }
+      }
+    }
+
     let context: ChatSessionContext
     do {
       context = try makeSessionContext(
@@ -385,7 +418,7 @@ public final class ChatService: ChatServiceProtocol {
     refreshCurrentWorkspaceUsage()
     evaluationRepairAttempts = 0
 
-    if let duration = request.durationSeconds {
+    if let duration = request.durationSeconds, request.mode != .codingProject {
       sessionTimer.start(duration: TimeInterval(duration))
     } else {
       sessionTimer.stop()
@@ -513,7 +546,14 @@ public final class ChatService: ChatServiceProtocol {
 
   private func sendKickoffMessage(for request: NewSessionRequest) {
     var text: String
-    if let configuration = request.knowledgeConfiguration,
+    if request.mode == .codingProject {
+      text = BuddyAgentInstructions.codingProjectKickoffMessage(
+        source: request.codingProjectSource ?? .generated,
+        difficulty: request.difficulty ?? .medium,
+        variationSeed: UUID().uuidString.lowercased(),
+        projectBrief: request.codingProjectBrief
+      )
+    } else if let configuration = request.knowledgeConfiguration,
        configuration.activity == .learn {
       let studySpace = knowledgeLibrary.studySpace(id: configuration.studySpaceID)
       let existingPlan = knowledgeLibrary.studyPlan(studySpaceID: configuration.studySpaceID)
@@ -760,6 +800,7 @@ public final class ChatService: ChatServiceProtocol {
   private func restoreTimer(for attempt: InterviewAttempt?) {
     guard let attempt,
           attempt.status == .inProgress,
+          attempt.mode != .codingProject || attempt.questionId != nil,
           let duration = attempt.plannedDurationSeconds else {
       sessionTimer.stop()
       return
@@ -1011,9 +1052,21 @@ public final class ChatService: ChatServiceProtocol {
       for result in results {
         switch result {
         case .question(let captured):
+          let startsCodingProjectTimer = mode == .codingProject &&
+            interviewSession.activeAttempt?.questionId == nil
           await questionBank.save(captured.question)
           if interviewSession.activeAttempt?.questionId == nil {
             await interviewSession.attachQuestion(captured.question)
+          }
+          if startsCodingProjectTimer,
+             let duration = interviewSession.activeAttempt?.plannedDurationSeconds {
+            await interviewSession.startTimedWork()
+            if let deadline = interviewSession.attemptDeadline {
+              sessionTimer.start(
+                deadline: deadline,
+                totalDuration: TimeInterval(duration)
+              )
+            }
           }
         case .evaluation(let captured):
           capturedEvaluation = true

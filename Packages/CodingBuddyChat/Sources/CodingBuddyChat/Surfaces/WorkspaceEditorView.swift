@@ -349,7 +349,8 @@ public struct WorkspaceEditorView: View {
     // Prefer the solution file; fall back to the first file. If Spar wrote to
     // the already-open file, adopt that disk content only while the candidate
     // has no unsaved edits in the visible editor.
-    let preferred = files.first { $0.url == starterURL } ?? files.first
+    let preferred = files.first { $0.url == starterURL }
+      ?? files.first
     if let preferred, selectedFile == nil || !files.contains(where: { $0 == selectedFile }) {
       select(preferred)
     } else if let selectedFile,
@@ -479,4 +480,5 @@ public struct WorkspaceEditorView: View {
   private var starterFileName: String {
     WorkspaceStarterContent.fileName(for: question?.languageHint)
   }
+
 }

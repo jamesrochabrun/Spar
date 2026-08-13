@@ -52,7 +52,13 @@ public final class InterviewSessionService {
     await leaveActiveAttempt()
 
     let workspaceSlug = question?.title ?? mode.displayName
-    let workspacePath = try? workspaceManager.createWorkspace(slug: workspaceSlug)
+    let workspaceKind: InterviewWorkspaceKind = mode == .codingProject
+      ? .xcodeProject
+      : .scratch
+    let workspacePath = try? workspaceManager.createWorkspace(
+      slug: workspaceSlug,
+      kind: workspaceKind
+    )
 
     let attempt = InterviewAttempt(
       questionId: question?.id,
@@ -104,6 +110,19 @@ public final class InterviewSessionService {
     try? await storage.updateAttempt(attempt)
   }
 
+  /// Starts the candidate-owned portion after asynchronous project preparation.
+  /// Resetting `startedAt` keeps the persisted deadline correct across relaunches.
+  public func startTimedWork() async {
+    guard var attempt = activeAttempt,
+          attempt.status == .inProgress,
+          attempt.plannedDurationSeconds != nil else {
+      return
+    }
+    attempt.startedAt = Date.now
+    activeAttempt = attempt
+    try? await storage.updateAttempt(attempt)
+  }
+
   public func recordHintUsed() async {
     guard var attempt = activeAttempt else { return }
     attempt.hintsUsed += 1
@@ -136,6 +155,17 @@ public final class InterviewSessionService {
 
   public func abandon() async {
     await leaveActiveAttempt()
+  }
+
+  /// Rolls back an attempt that failed during pre-session project preparation.
+  /// This is intentionally distinct from abandon, which preserves user work.
+  public func discardActiveAttempt() async {
+    guard let attempt = activeAttempt else { return }
+    if let workspacePath = attempt.workspacePath {
+      try? workspaceManager.deleteWorkspace(atPath: workspacePath)
+    }
+    try? await storage.deleteAttempt(id: attempt.id)
+    clearActiveAttempt()
   }
 
   /// Leaves the visible attempt, abandoning unfinished work while preserving

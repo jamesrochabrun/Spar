@@ -27,6 +27,7 @@ struct InterviewStorageTests {
     #expect(topics.contains { $0.id == "sd-caching" && $0.category == "system-design" })
     #expect(topics.contains { $0.id == "bh-ownership" && $0.category == "behavioral" })
     #expect(topics.contains { $0.id == "ios-concurrency" && $0.category == "ios" })
+    #expect(topics.contains { $0.id == "ios-practical-project" && $0.category == "ios" })
     #expect(topics.contains { $0.id == "sd-offline-sync" && $0.category == "system-design" })
   }
 

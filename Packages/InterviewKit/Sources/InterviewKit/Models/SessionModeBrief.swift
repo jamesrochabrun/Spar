@@ -3,8 +3,8 @@
 //  InterviewKit
 //
 //  What actually differs between the modes, in the user's words. The picker
-//  used to show five names and nothing else, which made three coding modes
-//  look like three labels for the same session. These are the axes that
+//  used to show mode names and nothing else, which made several coding modes
+//  look like labels for the same session. These are the axes that
 //  really differ: how much you get, when you find out how you did, and what
 //  the session is for.
 //
@@ -34,6 +34,12 @@ extension SessionMode {
         format: "One problem, on the clock",
         feedback: "Held back until the end — the interviewer never says if you're right",
         bestFor: "Rehearsing the real thing: clarify, plan out loud, defend your complexity"
+      )
+    case .codingProject:
+      return SessionModeBrief(
+        format: "One 60-minute feature in a provided Xcode project",
+        feedback: "A final review of your Git diff, build, tests, and implementation choices",
+        bestFor: "Reading unfamiliar SwiftUI code and shipping a practical change under time pressure"
       )
     case .drill:
       return SessionModeBrief(

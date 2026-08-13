@@ -92,9 +92,9 @@ public struct ModeGroup: Identifiable {
     self.isExpanded = isExpanded
   }
 
-  /// Fixed sidebar order: Mock, Drills, Practice, System Design, Behavioral.
+  /// Fixed sidebar order for the six interview and study modes.
   public static let displayOrder: [SessionMode] = [
-    .mockInterview, .drill, .practice, .systemDesign, .behavioral,
+    .mockInterview, .codingProject, .drill, .practice, .systemDesign, .behavioral,
   ]
 
   /// Joins attempts with stored sessions and buckets them by mode. Sessions

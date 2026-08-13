@@ -4,16 +4,21 @@ Spar is a native macOS app for deliberate technical-interview practice. It pairs
 interviewer with a real coding workspace, source-grounded repository study, structured
 feedback, and progress tracking so you can practice the way you expect to perform.
 
-Use Spar for a timed mock interview, a quick sequence of drills, an untimed tutoring
-session, a system-design discussion, or behavioral coaching. You choose the AI provider
-for each session and keep your attempts, study plans, and progress on your Mac.
+Use Spar for a timed mock interview, a practical SwiftUI project in Xcode, a quick
+sequence of drills, an untimed tutoring session, a system-design discussion, or
+behavioral coaching. You choose the AI provider for each session and keep your attempts,
+study plans, and progress on your Mac.
 
 ## What you can do
 
-### Practice in five modes
+### Practice in six modes
 
 - **Mock Interview** — Complete one timed problem with limited, progressively stronger
   hints, then receive rubric-based feedback.
+- **Coding Project** — Extend a generated or imported SwiftUI project exclusively in
+  Xcode for 60 minutes while Spar observes the project and Git diff, then receive a
+  build-, test-, and diff-based practical assessment. Optionally provide a project brief
+  describing the app, API, persistence layer, feature, or debugging bugs you want to practice.
 - **Drills** — Work through rapid-fire problems whose difficulty adapts to your recent
   answers.
 - **Practice** — Learn through untimed, interactive tutoring with explanations and
@@ -101,6 +106,7 @@ Spar keeps its durable data on your Mac:
 | Data | Location |
 | --- | --- |
 | Attempt workspaces | `~/Documents/CodingBuddy/Workspaces/` |
+| Coding Project Xcode projects | `~/Documents/CodingBuddy/Xcode Projects/` |
 | Questions, attempts, and evaluations | `~/Library/Application Support/CodingBuddy/interview_bank.sqlite` |
 | Chat sessions | `~/Library/Application Support/CodingBuddy/claude_code_sessions.sqlite` |
 | Repository indexes and study plans | `~/Library/Application Support/CodingBuddy/knowledge_library.sqlite` |

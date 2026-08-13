@@ -439,15 +439,26 @@ struct MainContentView: View {
         .accessibilityHidden(selectedSurface != .hints)
 
         if availableSurfaces.contains(.workspace) {
-          WorkspaceEditorView(
-            workspacePath: chatService.interviewSession.activeAttempt?.workspacePath,
-            question: chatService.interviewSession.activeQuestion,
-            externalRefreshToken: chatService.workspaceRevision,
-            onReviewRequested: { fileName in
-              chatService.requestReview(fileName: fileName)
-            },
-            floatingAccessory: workspaceHintsAccessory
-          )
+          Group {
+            if chatService.currentMode == .codingProject {
+              CodingProjectRequirementsView(
+                workspacePath: chatService.interviewSession.activeAttempt?.workspacePath,
+                question: chatService.interviewSession.activeQuestion,
+                externalRefreshToken: chatService.workspaceRevision
+              )
+            } else {
+              WorkspaceEditorView(
+                workspacePath: chatService.interviewSession.activeAttempt?.workspacePath,
+                question: chatService.interviewSession.activeQuestion,
+                externalRefreshToken: chatService.workspaceRevision,
+                onReviewRequested: { fileName in
+                  chatService.requestReview(fileName: fileName)
+                },
+                floatingAccessory: workspaceHintsAccessory
+              )
+            }
+          }
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
           .opacity(selectedSurface == .workspace ? 1 : 0)
           .allowsHitTesting(selectedSurface == .workspace)
           .accessibilityHidden(selectedSurface != .workspace)
@@ -575,13 +586,19 @@ struct MainContentView: View {
     HStack(spacing: 12) {
       Picker("Surface", selection: $selectedSurface) {
         ForEach(availableSurfaces) { surface in
-          Label(surface.displayName, systemImage: surface.systemImage)
+          Label(
+            surface.displayName(for: chatService.currentMode),
+            systemImage: surface.systemImage(for: chatService.currentMode)
+          )
             .tag(surface)
         }
       }
       .pickerStyle(.segmented)
       .labelsHidden()
-      .frame(width: CGFloat(availableSurfaces.count) * 92)
+      .frame(
+        width: CGFloat(availableSurfaces.count)
+          * (chatService.currentMode == .codingProject ? 116 : 92)
+      )
 
       Spacer()
 

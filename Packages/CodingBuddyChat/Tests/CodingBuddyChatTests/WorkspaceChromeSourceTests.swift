@@ -17,6 +17,32 @@ struct WorkspaceChromeSourceTests {
   }
 
   @Test
+  func codingProjectSurfaceShowsRequirementsWithoutAnEditor() throws {
+    let source = try sourceContents(
+      "Sources/CodingBuddyChat/Surfaces/CodingProjectRequirementsView.swift"
+    )
+
+    #expect(source.contains("CodingProjectRequirementsParser.parse"))
+    #expect(source.contains("Open in Xcode"))
+    #expect(source.contains("projectOpener.openProject"))
+    #expect(source.contains("ProgressView()"))
+    #expect(!source.contains("ProjectResourceTextPreview"))
+    #expect(!source.contains("SourceCodeEditorView"))
+  }
+
+  @Test
+  func codingProjectSetupAcceptsAnOptionalMultilineBrief() throws {
+    let source = try sourceContents(
+      "Sources/CodingBuddyChat/Sidebar/CodingProjectSetupSection.swift"
+    )
+
+    #expect(source.contains("Project brief (optional)"))
+    #expect(source.contains("axis: .vertical"))
+    #expect(source.contains("CodingProjectBrief.maximumCharacterCount"))
+    #expect(source.contains("Leave this blank"))
+  }
+
+  @Test
   func sidebarUsesFlatRowsAndOnlyTheTopBarCreateControl() throws {
     let source = try sourceContents(
       "Sources/CodingBuddyChat/Sidebar/SidebarView.swift"
