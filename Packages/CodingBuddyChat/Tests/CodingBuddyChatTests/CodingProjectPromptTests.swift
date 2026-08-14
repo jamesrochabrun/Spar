@@ -5,7 +5,7 @@ import Testing
 
 struct CodingProjectPromptTests {
   @Test
-  func generatedKickoffBuildsAndCommitsAVariedSwiftUIXcodeBaselineFirst() {
+  func generatedKickoffCreatesAndCommitsWithoutExecutingTheXcodeProject() {
     let message = BuddyAgentInstructions.codingProjectKickoffMessage(
       source: .generated,
       difficulty: .hard,
@@ -17,7 +17,10 @@ struct CodingProjectPromptTests {
     #expect(message.contains(".xcodeproj"))
     #expect(message.contains("SwiftUI only"))
     #expect(message.contains("Do not use UIKit or AppKit"))
-    #expect(message.contains("xcodebuild -list"))
+    #expect(message.contains("`xcodebuild`"))
+    #expect(message.contains("Do not compile, build, run, or test it"))
+    #expect(message.contains("static inspection"))
+    #expect(!message.contains("xcodebuild -list"))
     #expect(message.localizedCaseInsensitiveContains("swift package"))
     #expect(message.contains("git status --short"))
     #expect(message.contains("hard"))
@@ -42,7 +45,9 @@ struct CodingProjectPromptTests {
     #expect(message.contains("copied"))
     #expect(message.contains("committed a clean interview baseline"))
     #expect(message.contains("without restructuring it"))
-    #expect(message.contains("existing failure"))
+    #expect(message.contains("Assume the imported project compiles"))
+    #expect(message.contains("Do not"))
+    #expect(message.contains("simulator"))
     #expect(message.contains("60 minutes"))
   }
 
@@ -101,7 +106,9 @@ struct CodingProjectPromptTests {
 
     #expect(context.contains("mode: coding_project"))
     #expect(context.contains("committed Git baseline"))
-    #expect(context.contains("project access: read-only"))
+    #expect(context.contains("project access: diff-only"))
+    #expect(context.contains("project validation: assume it compiles"))
+    #expect(context.contains("never build, run, test"))
     #expect(!context.contains("primary file:"))
     #expect(!context.contains("solution.swift"))
   }

@@ -102,7 +102,7 @@ struct BuddyAgentInstructionsTests {
   }
 
   @Test
-  func codingProjectUsesPracticalGitBuildAndCollaborationRubric() {
+  func codingProjectUsesDiffOnlyReviewAndCollaborationRubric() {
     let prefixes = BuddyAgentInstructions.prefixes(for: .codingProject)
     let directive = BuddyAgentInstructions.evaluationDirective(mode: .codingProject)
 
@@ -115,8 +115,12 @@ struct BuddyAgentInstructionsTests {
       #expect(prompt.contains("communication_collaboration"))
       #expect(prompt.localizedCaseInsensitiveContains("git"))
       #expect(prompt.contains("xcodebuild"))
-      #expect(prompt.localizedCaseInsensitiveContains("build"))
-      #expect(prompt.localizedCaseInsensitiveContains("failures") || prompt.localizedCaseInsensitiveContains("errors"))
+      #expect(prompt.localizedCaseInsensitiveContains("assume") && prompt.localizedCaseInsensitiveContains("compiles"))
+      #expect(prompt.localizedCaseInsensitiveContains("never") && prompt.localizedCaseInsensitiveContains("build"))
+      #expect(prompt.localizedCaseInsensitiveContains("diff-only"))
+      #expect(!prompt.contains("run the relevant xcodebuild"))
+      #expect(!prompt.contains("build and test the Xcode project"))
+      #expect(!prompt.contains("verify the final build/tests"))
     }
 
     #expect(!directive.contains("Syntax is out of scope"))
@@ -130,7 +134,7 @@ struct BuddyAgentInstructionsTests {
       #expect(prompt.contains("solution.swift"))
       #expect(prompt.localizedCaseInsensitiveContains("read-only"))
       #expect(prompt.contains("candidate") && prompt.contains("Xcode"))
-      #expect(prompt.contains("compiles before"))
+      #expect(prompt.localizedCaseInsensitiveContains("assume") && prompt.localizedCaseInsensitiveContains("compiles"))
     }
     #expect(prefixes.api.contains("do not paste the whole Xcode project"))
   }
@@ -145,6 +149,20 @@ struct BuddyAgentInstructionsTests {
       #expect(prompt.contains("never") && prompt.contains("edit"))
     }
     #expect(prefixes.api.contains("even if asked for the full solution"))
+  }
+
+  @Test
+  func codingProjectReviewNeverExecutesCandidateCode() {
+    let prefixes = BuddyAgentInstructions.prefixes(for: .codingProject)
+
+    for prompt in [prefixes.claude, prefixes.codex, prefixes.api] {
+      #expect(prompt.contains("[REVIEW MY SOLUTION]"))
+      #expect(prompt.localizedCaseInsensitiveContains("git status"))
+      #expect(prompt.localizedCaseInsensitiveContains("untracked files"))
+      #expect(prompt.localizedCaseInsensitiveContains("assume the project compiles"))
+      #expect(prompt.localizedCaseInsensitiveContains("never") && prompt.localizedCaseInsensitiveContains("build"))
+      #expect(prompt.localizedCaseInsensitiveContains("simulator"))
+    }
   }
 
   @Test

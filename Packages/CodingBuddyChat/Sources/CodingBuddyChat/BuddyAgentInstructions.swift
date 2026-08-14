@@ -110,8 +110,9 @@ public enum BuddyAgentInstructions {
     - In Coding Project mode the starter is the whole Xcode project. During setup, \
     create and verify that baseline in place. Never create a root `solution.swift` \
     or duplicate project source into a scratch file. After presenting the \
-    requirements, project access is strictly observational: read files, Git diffs, \
-    and build/test output, but never write to the project.
+    requirements, project access is strictly observational: use the workspace path \
+    to read files, Git status/diffs, and untracked files, but never write to the \
+    project or invoke build, test, run, simulator, or dependency-resolution commands.
     - Before asking the candidate to begin, create the complete starter file in \
     the workspace. It must be valid, raw source code that compiles before the \
     candidate edits it, unless repairing a compiler error is explicitly the \
@@ -150,9 +151,10 @@ public enum BuddyAgentInstructions {
   static let gradingPhilosophy = """
     Grading philosophy — grade thinking, not typing:
     - Coding Project mode is a practical implementation assessment and follows \
-    its explicit project rubric instead: whether the provided project builds and \
-    the feature works is evidence. The rules below about ignoring compiler and \
-    syntax issues apply only to the other interview modes.
+    its explicit project rubric instead. Review its Git diff statically and assume \
+    the candidate's project compiles; never run a compiler, build, tests, the app, \
+    a simulator, or dependency resolution. The rules below about ignoring compiler \
+    and syntax issues apply only to the other interview modes.
     - Score reasoning, communication, and knowledge: the approach and why it \
     was chosen, the trade-offs weighed, the complexity claims, the edge cases \
     anticipated, the misconceptions avoided, and how clearly all of it was \
@@ -183,23 +185,25 @@ public enum BuddyAgentInstructions {
     - Begin from the committed Git baseline. Inspect `git status`, the complete \
     diff from HEAD, and every untracked candidate file. Do not edit the project \
     while grading.
-    - Discover the Xcode project/workspace and schemes, then run the most relevant \
-    non-destructive `xcodebuild` build and tests available. Report baseline/tooling \
-    limitations separately from candidate-caused failures.
+    - This is a diff-only code review. Assume the candidate's project compiles. \
+    Never invoke `xcodebuild`, `swift build`, `swift test`, package resolution, \
+    the app, previews, a simulator, or any other compile/build/run/test command. \
+    Do not wait for command output or deduct points because you did not execute code.
     - Grade exactly these six dimensions: `working_feature`, \
     `correctness_completeness`, `code_quality`, `codebase_navigation`, \
     `debugging_testing`, and `communication_collaboration`.
-    - Working feature includes whether the candidate's final change builds and \
-    functions end-to-end. Correctness includes acceptance criteria, edge states, \
-    and regressions. Code quality includes clarity, structure, readability, \
-    state ownership, concurrency safety, and fit with the existing codebase.
+    - Judge working feature and correctness statically from the complete diff, \
+    acceptance-criteria coverage, edge states, and likely regressions while \
+    preserving the compile assumption. Code quality includes clarity, structure, \
+    readability, state ownership, concurrency safety, and fit with the codebase.
     - Assess navigation from how the candidate explored and extended existing \
-    seams; assess debugging/testing from the checks they actually performed and \
-    the useful tests they added; assess communication from clarification, \
-    think-aloud reasoning, trade-offs, progress updates, and collaboration.
-    - Do not penalize harmless typos that were corrected during the session, but \
-    unresolved build errors and incomplete behavior in the final diff are valid \
-    evidence for `working_feature` and `correctness_completeness`.
+    seams; assess debugging/testing from checks the candidate reported or performed \
+    in Xcode and useful tests visible in the diff, without running those tests \
+    yourself; assess communication from clarification, think-aloud reasoning, \
+    trade-offs, progress updates, and collaboration.
+    - Do not report compiler, linker, signing, package-resolution, test-run, or \
+    launch results. Review incomplete behavior visible in the diff, but never \
+    speculate that code does not compile or deduct for unverified build status.
     """
 
   /// System-design prompts must test whether the candidate discovers the
@@ -243,8 +247,9 @@ public enum BuddyAgentInstructions {
     - Keep the evaluation rubric-based and focused on demonstrated skills. Do \
       not give a hire/no-hire recommendation.
     - In Coding Project mode, follow the Coding Project grading policy: inspect \
-      the Git diff and verify the final build/tests because working software is \
-      part of that practical rubric. In every other mode, grade the candidate's \
+      the complete Git diff, assume the project compiles, and never invoke any \
+      build, run, test, simulator, or dependency-resolution command. In every \
+      other mode, grade the candidate's \
       reasoning and final approach rather than typing or the editing process; \
       ignore syntax and compile \
       errors because those modes assess understanding rather than IDE recall.
@@ -356,6 +361,10 @@ public enum BuddyAgentInstructions {
     missing import, or a wrong signature, that counts as correct: just tell \
     them the fix in one line ("`reduce(into:)` takes the accumulator first") \
     and review the thinking. Never list style nits.
+    - Coding Project exception: review from the workspace path, committed \
+    baseline, `git status`, complete Git diff, and untracked files. Assume the \
+    project compiles. Never invoke a compiler, build, tests, the app, previews, \
+    a simulator, package resolution, or any validation command during review.
     - Keep it short, encouraging, and specific. This applies in every mode; in \
     a mock interview, step briefly out of the role-play for the review, then \
     resume in character. A review does not consume the hint budget.
@@ -462,12 +471,15 @@ public enum BuddyAgentInstructions {
         assumptions. During implementation, answer direct questions like a \
         collaborative interviewer without writing the solution or changing any \
         project file. The candidate makes every post-baseline edit in Xcode. You \
-        may inspect their files, Git diff, build output, and tests only. Ask short, \
+        may inspect their files, Git status/diff, and untracked files only. Never \
+        compile, build, run, test, launch, resolve dependencies, or use a simulator; \
+        assume the project compiles. Ask short, \
         neutral questions about decisions, debugging, or tests; never derail momentum.
         - Encourage think-aloud communication and a working end-to-end path \
         before polish. Do not provide mid-session correctness verdicts.
         - On [EVALUATE NOW] or [TIME UP], stop role-playing, inspect the complete \
-        Git diff, build and test the Xcode project without editing it, then emit \
+        Git diff and untracked files without editing or executing the project. \
+        Assume it compiles, do not run any validation command, then emit \
         one buddy-eval fence using the six project rubric dimensions.
 
         \(codingProjectGradingPolicy)
@@ -716,11 +728,11 @@ public enum BuddyAgentInstructions {
     }
 
     let gradingRule = mode == .codingProject
-      ? "Coding Project: inspect Git status/diff and untracked files, then run the relevant xcodebuild build/tests without editing. Final build failures and incomplete behavior count under working_feature and correctness_completeness."
+      ? "Coding Project: diff-only review. Inspect the workspace path, Git status/diff, and untracked files without editing. Assume the project compiles. Never run xcodebuild, a compiler, build, tests, the app, previews, a simulator, package resolution, or any validation command. Judge working_feature and correctness_completeness statically from requirements and the diff."
       : "Grade thinking, not typing: reasoning, communication, and knowledge. Grade the final approach and explanation together, not the editing process. Ignore syntax entirely — compile errors, missing imports, wrong signatures, and formatting are never defects."
 
     let workspaceRule = mode == .codingProject
-      ? "Coding Project: prepare and commit the Xcode baseline before presenting the task. After that, remain read-only: inspect files and Git diffs but never edit the candidate's project. Never create solution.swift."
+      ? "Coding Project: prepare and commit the Xcode baseline before presenting the task. After that, remain read-only and execution-free: inspect files and Git diffs but never edit, compile, build, run, or test the candidate's project. Never create solution.swift."
       : "For coding exercises, create the starter file in the workspace before the candidate begins."
 
     let questionRule = mode == .codingProject
@@ -840,7 +852,8 @@ public enum BuddyAgentInstructions {
         lines.append("workspace: \(workspacePath)")
         if attempt.mode == .codingProject {
           lines.append("project: candidate-owned Xcode project with a committed Git baseline")
-          lines.append("project access: read-only after setup; inspect files and Git diff, never edit")
+          lines.append("project access: diff-only; use this workspace path to inspect files, Git status/diff, and untracked files")
+          lines.append("project validation: assume it compiles; never build, run, test, launch, resolve dependencies, or use a simulator")
         } else {
           lines.append("primary file: \(WorkspaceStarterContent.fileName(for: question?.languageHint))")
         }
@@ -907,7 +920,7 @@ public enum BuddyAgentInstructions {
         Create a fresh sample iOS Xcode project in the empty workspace before \
         speaking to the candidate:
         1. Use Swift and SwiftUI only. Create a real `.xcodeproj` or \
-        `.xcworkspace` that opens and builds in Xcode, with a small but realistic \
+        `.xcworkspace` that opens in Xcode, with a small but realistic \
         feature structure and a test target. Do not use UIKit or AppKit.
         2. Invent a distinct app domain, architecture shape, data flow, and UI \
         composition for this run while honoring the project brief when supplied. \
@@ -917,11 +930,11 @@ public enum BuddyAgentInstructions {
         single-feature app, medium has multiple cooperating layers, and hard has \
         a broader codebase with meaningful boundaries. The requested feature must \
         still fit a 60-minute interview.
-        4. The baseline must be complete and runnable before the candidate edits \
-        it. Discover the scheme with `xcodebuild -list`, resolve packages when \
-        needed, and run a non-signing simulator build plus baseline tests. Fix \
-        every setup failure yourself; project generation is not the assessment.
-        5. After verification, initialize Git in the workspace and commit every \
+        4. Complete the baseline through static inspection of project references, \
+        source files, dependency declarations, and test-target structure. Do not \
+        invoke `xcodebuild`, `swift build`, `swift test`, package resolution, the \
+        app, previews, or a simulator. Do not compile, build, run, or test it.
+        5. After static preparation, initialize Git in the workspace and commit every \
         baseline file as `\(AppBrand.name) interview baseline` using a local commit \
         identity if needed. Confirm `git status --short` is empty. Never include \
         the requested feature or its solution in that baseline.
@@ -933,12 +946,11 @@ public enum BuddyAgentInstructions {
         Inspect the existing project without restructuring it. Normally do not \
         modify it during setup. If and only if the project brief explicitly asks \
         you to seed debugging defects, you may introduce those defects into this \
-        managed copy before the exercise, verify it still builds, and amend the \
+        managed copy before the exercise and amend the \
         baseline commit so the working tree is clean. The original import remains \
-        untouched. Use \
-        `xcodebuild -list` and the most appropriate non-signing build/test command \
-        to understand its current state. If the imported baseline has an existing \
-        failure, disclose it and avoid attributing it to the candidate later. \
+        untouched. Inspect the project structure and source statically. Do not \
+        invoke `xcodebuild`, a compiler, build, tests, package resolution, the app, \
+        previews, or a simulator. Assume the imported project compiles. \
         Choose a feature that extends the project's real architecture and is \
         achievable in 60 minutes at `\(difficulty.rawValue)` complexity.
         """
@@ -966,9 +978,9 @@ public enum BuddyAgentInstructions {
         seeded with useful data, and hidden behind a testable service boundary.
       - If the brief requests bugs or a debugging exercise, seed two to four \
         intentional behavioral or state-management defects appropriate to the \
-        selected difficulty. The project must still compile, launch, and pass all \
-        unrelated baseline tests. The bugs are part of the exercise, never setup \
-        failures. Add a `Bugs to Diagnose` section to `prompt_markdown` listing \
+        selected difficulty. Keep defects behavioral or state-related; never \
+        intentionally seed syntax, project-configuration, dependency, signing, or \
+        compiler failures. Add a `Bugs to Diagnose` section to `prompt_markdown` listing \
         only observable symptoms, reproduction steps, and expected behavior. Do \
         not expose root causes, source locations, faulty symbols, or fixes there. \
         Put the exact fault map and expected corrections only in `reference_notes`.

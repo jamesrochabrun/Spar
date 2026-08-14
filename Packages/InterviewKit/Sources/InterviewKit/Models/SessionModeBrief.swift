@@ -38,7 +38,7 @@ extension SessionMode {
     case .codingProject:
       return SessionModeBrief(
         format: "One 60-minute feature in a provided Xcode project",
-        feedback: "A final review of your Git diff, build, tests, and implementation choices",
+        feedback: "A final code review of your Git diff, tests, and implementation choices",
         bestFor: "Reading unfamiliar SwiftUI code and shipping a practical change under time pressure"
       )
     case .drill:

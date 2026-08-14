@@ -17,7 +17,8 @@ study plans, and progress on your Mac.
   hints, then receive rubric-based feedback.
 - **Coding Project** — Extend a generated or imported SwiftUI project exclusively in
   Xcode for 60 minutes while Spar observes the project and Git diff, then receive a
-  build-, test-, and diff-based practical assessment. Optionally provide a project brief
+  diff-only code review that assumes the project compiles. Spar never builds, runs, or
+  tests the candidate project. Optionally provide a project brief
   describing the app, API, persistence layer, feature, or debugging bugs you want to practice.
 - **Drills** — Work through rapid-fire problems whose difficulty adapts to your recent
   answers.

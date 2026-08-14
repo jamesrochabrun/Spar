@@ -44,7 +44,7 @@ public struct CodingProjectRequirementsView: View {
             .font(.title2)
             .bold()
 
-          Text("The agent is generating, building, testing, and committing the baseline. The timer starts when the requirements are ready.")
+          Text("The agent is generating and committing the baseline. The timer starts when the requirements are ready.")
             .font(.callout)
             .foregroundStyle(EaselDesignSystem.Palette.secondaryText(for: colorScheme))
             .multilineTextAlignment(.center)
@@ -53,7 +53,7 @@ public struct CodingProjectRequirementsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Preparing your Xcode project")
-        .accessibilityValue("Generating, building, testing, and committing the baseline")
+        .accessibilityValue("Generating and committing the baseline")
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
