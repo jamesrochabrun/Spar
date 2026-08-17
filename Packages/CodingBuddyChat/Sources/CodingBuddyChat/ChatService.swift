@@ -179,6 +179,11 @@ public final class ChatService: ChatServiceProtocol {
   private var capturedAssistantMessageIds: Set<UUID> = []
   private var evaluationRepairAttempts = 0
   private let maxEvaluationRepairAttempts = 2
+  private var codingProjectExtensionRepairAttempts = 0
+  private let maxCodingProjectExtensionRepairAttempts = 1
+  /// Set when Regenerate reopened a graded attempt, so the new round's clock
+  /// starts with its new task list rather than with the request.
+  private var codingProjectExtensionRestartsClock = false
   private var pendingStudyPlanGenerationSpaceIDs: Set<String> = []
   private var studyPlanRepairAttemptsBySpaceID: [String: Int] = [:]
   private let maxStudyPlanRepairAttempts = 2
@@ -417,6 +422,7 @@ public final class ChatService: ChatServiceProtocol {
     setCurrentSessionId(nil)
     refreshCurrentWorkspaceUsage()
     evaluationRepairAttempts = 0
+    resetCodingProjectExtensionState()
 
     if let duration = request.durationSeconds, request.mode != .codingProject {
       sessionTimer.start(duration: TimeInterval(duration))
@@ -723,6 +729,104 @@ public final class ChatService: ChatServiceProtocol {
     )
   }
 
+  // MARK: - Coding project task list
+
+  /// Coding Project only: the candidate can ask for an updated task list once
+  /// the exercise exists and the agent is idle. Grading in flight blocks it —
+  /// the grader and the extension would otherwise fight over the same turn.
+  public var canRegenerateCodingProjectRequirements: Bool {
+    guard currentMode == .codingProject,
+          !isRegeneratingCodingProject,
+          chatViewModel?.isLoading != true,
+          interviewSession.activeQuestion != nil,
+          let attempt = interviewSession.activeAttempt else {
+      return false
+    }
+    return attempt.status == .inProgress || attempt.status == .evaluated
+  }
+
+  /// True from the moment the extension turn is sent until its replacement task
+  /// list lands (or the repair budget runs out).
+  public private(set) var isRegeneratingCodingProject = false
+
+  /// "Regenerate": the agent reviews the candidate's diff against the current
+  /// task list, then re-issues the list with the unfinished work plus new work.
+  /// A graded attempt goes back to work so the added tasks can be attempted and
+  /// re-graded; the old rubric stays on the report until a new one replaces it.
+  @discardableResult
+  public func regenerateCodingProjectRequirements(details: String? = nil) async -> Bool {
+    guard canRegenerateCodingProjectRequirements,
+          let question = interviewSession.activeQuestion else {
+      return false
+    }
+
+    // A graded round goes back to work, but its clock only starts once the new
+    // task list lands — reviewing the diff must not eat the candidate's hour.
+    // A round still in progress keeps the time it has left.
+    if interviewSession.activeAttempt?.status == .evaluated {
+      codingProjectExtensionRestartsClock = await interviewSession.reopenForNextRound()
+    }
+
+    isRegeneratingCodingProject = true
+    codingProjectExtensionRepairAttempts = 0
+    sendMessageToViewModel(
+      BuddyAgentInstructions.codingProjectExtensionMessage(
+        currentPrompt: question.promptMarkdown,
+        lastOverallScore: interviewSession.latestEvaluation?.overallScore,
+        details: details
+      )
+    )
+    return true
+  }
+
+  /// The pending extension belongs to one session's transcript; leaving it must
+  /// not leave another session's Regenerate button spinning.
+  private func resetCodingProjectExtensionState() {
+    isRegeneratingCodingProject = false
+    codingProjectExtensionRepairAttempts = 0
+    codingProjectExtensionRestartsClock = false
+  }
+
+  /// Starts the candidate-owned portion of a coding project round. The planned
+  /// duration begins when the task list is on screen, never while the agent is
+  /// still preparing or reviewing the project.
+  private func startCodingProjectClock() async {
+    guard let duration = interviewSession.activeAttempt?.plannedDurationSeconds else { return }
+    await interviewSession.startTimedWork()
+    guard let deadline = interviewSession.attemptDeadline else { return }
+    sessionTimer.start(deadline: deadline, totalDuration: TimeInterval(duration))
+  }
+
+  /// Grading can be pulled back until a rubric actually lands.
+  public var canCancelGrading: Bool {
+    interviewSession.activeAttempt?.status == .awaitingEvaluation
+  }
+
+  /// Undo of "End & grade": stops the in-flight grading turn, puts the attempt
+  /// back to work, and resumes the countdown from the persisted deadline —
+  /// time spent waiting on the grader still counts, so a deadline that passed
+  /// meanwhile leaves the session untimed rather than instantly re-grading.
+  @discardableResult
+  public func cancelGrading() async -> Bool {
+    guard canCancelGrading else { return false }
+
+    chatViewModel?.cancelRequest()
+    let reverted = await interviewSession.cancelEvaluationRequest()
+    guard reverted else { return false }
+
+    evaluationRepairAttempts = 0
+
+    if let deadline = interviewSession.attemptDeadline,
+       let duration = interviewSession.activeAttempt?.plannedDurationSeconds,
+       deadline.timeIntervalSinceNow > 0 {
+      sessionTimer.start(deadline: deadline, totalDuration: TimeInterval(duration))
+    } else {
+      sessionTimer.stop()
+    }
+
+    return true
+  }
+
   private func handleTimerExpired() async {
     await endAndGrade()
   }
@@ -792,6 +896,7 @@ public final class ChatService: ChatServiceProtocol {
     setCurrentWorkingDirectory(normalized(context.viewModel.projectPath) ?? sessionToLoad.workingDirectory)
     setCurrentSessionId(sessionToLoad.id)
     evaluationRepairAttempts = 0
+    resetCodingProjectExtensionState()
     restoreTimer(for: restoredAttempt)
   }
 
@@ -847,6 +952,7 @@ public final class ChatService: ChatServiceProtocol {
 
   public func clearActiveWorkspace() async {
     sessionTimer.stop()
+    resetCodingProjectExtensionState()
 
     let retainedContexts = Array(sessionContextsById.values) + Array(pendingSessionContextsByViewModelId.values)
     for context in retainedContexts {
@@ -1052,21 +1158,21 @@ public final class ChatService: ChatServiceProtocol {
       for result in results {
         switch result {
         case .question(let captured):
-          let startsCodingProjectTimer = mode == .codingProject &&
-            interviewSession.activeAttempt?.questionId == nil
+          // A regenerated task list replaces the attached exercise; every other
+          // mid-session fence is a bank question, not the attempt's own.
+          let replacesAttachedQuestion = isRegeneratingCodingProject && mode == .codingProject
+          let startsCodingProjectClock = mode == .codingProject &&
+            (interviewSession.activeAttempt?.questionId == nil ||
+              (replacesAttachedQuestion && codingProjectExtensionRestartsClock))
           await questionBank.save(captured.question)
-          if interviewSession.activeAttempt?.questionId == nil {
+          if interviewSession.activeAttempt?.questionId == nil || replacesAttachedQuestion {
             await interviewSession.attachQuestion(captured.question)
           }
-          if startsCodingProjectTimer,
-             let duration = interviewSession.activeAttempt?.plannedDurationSeconds {
-            await interviewSession.startTimedWork()
-            if let deadline = interviewSession.attemptDeadline {
-              sessionTimer.start(
-                deadline: deadline,
-                totalDuration: TimeInterval(duration)
-              )
-            }
+          if replacesAttachedQuestion {
+            resetCodingProjectExtensionState()
+          }
+          if startsCodingProjectClock {
+            await startCodingProjectClock()
           }
         case .evaluation(let captured):
           capturedEvaluation = true
@@ -1074,6 +1180,23 @@ public final class ChatService: ChatServiceProtocol {
           await skillStats.refresh()
         case .drillRep(let captured):
           interviewSession.recordDrillRep(captured.rep)
+        }
+      }
+
+      // Repair loop: the extension turn produced no replacement task list.
+      if isRegeneratingCodingProject {
+        if codingProjectExtensionRepairAttempts < maxCodingProjectExtensionRepairAttempts {
+          codingProjectExtensionRepairAttempts += 1
+          sendMessageToViewModel(BuddyAgentInstructions.codingProjectExtensionRepairDirective())
+        } else {
+          // Out of retries: release the button and, if the round was reopened
+          // for this, start its clock anyway rather than stranding the session
+          // in progress with a dead timer.
+          let restartsClock = codingProjectExtensionRestartsClock
+          resetCodingProjectExtensionState()
+          if restartsClock {
+            await startCodingProjectClock()
+          }
         }
       }
 

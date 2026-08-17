@@ -202,7 +202,7 @@ public struct WorkspaceEditorView: View {
         guard let selectedFile else { return }
         select(selectedFile)
       }
-      .buttonStyle(.bordered)
+      .easelSecondaryButton()
       .controlSize(.small)
 
       Button("Keep My Version") {

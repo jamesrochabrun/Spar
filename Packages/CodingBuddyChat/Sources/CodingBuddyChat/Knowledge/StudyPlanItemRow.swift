@@ -47,7 +47,7 @@ struct StudyPlanItemRow: View {
       Spacer()
 
       Button("Start", systemImage: "play.fill", action: onStudy)
-        .buttonStyle(.bordered)
+        .easelSecondaryButton()
         .controlSize(.small)
         .help("Open item \(number) in the Lesson panel — \(AppBrand.name) sets the first task")
     }

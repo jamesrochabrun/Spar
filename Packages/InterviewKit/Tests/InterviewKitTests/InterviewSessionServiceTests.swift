@@ -69,6 +69,89 @@ struct InterviewSessionServiceTests {
   }
 
   @Test
+  func cancelledEvaluationRequestPutsTheAttemptBackToWork() async throws {
+    let (service, storage, root) = makeService()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let attempt = try await service.beginAttempt(
+      mode: .mockInterview,
+      durationSeconds: 1800,
+      provider: "claude"
+    )
+
+    await service.requestEvaluation()
+    #expect(service.activeAttempt?.status == .awaitingEvaluation)
+    #expect(service.activeAttempt?.endedAt != nil)
+
+    let cancelled = await service.cancelEvaluationRequest()
+    #expect(cancelled)
+    #expect(service.activeAttempt?.status == .inProgress)
+    #expect(service.activeAttempt?.endedAt == nil)
+
+    let persisted = try await storage.attempt(id: attempt.id)
+    #expect(persisted?.status == .inProgress)
+    #expect(persisted?.endedAt == nil)
+  }
+
+  @Test
+  func cancelIsRefusedOnceTheEvaluationLanded() async throws {
+    let (service, _, root) = makeService()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let attempt = try await service.beginAttempt(mode: .mockInterview, provider: "claude")
+    await service.requestEvaluation()
+    await service.completeEvaluation(
+      RubricEvaluation(attemptId: attempt.id, overallScore: 70, summaryMarkdown: "Ok", rawJSON: "{}"),
+      notes: []
+    )
+
+    let cancelled = await service.cancelEvaluationRequest()
+    #expect(!cancelled)
+    #expect(service.activeAttempt?.status == .evaluated)
+  }
+
+  @Test
+  func reopeningAGradedAttemptStartsAnotherRoundWithAFreshClock() async throws {
+    let (service, storage, root) = makeService()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let attempt = try await service.beginAttempt(
+      mode: .codingProject,
+      durationSeconds: 3600,
+      provider: "claude"
+    )
+    await service.requestEvaluation()
+    await service.completeEvaluation(
+      RubricEvaluation(attemptId: attempt.id, overallScore: 8, summaryMarkdown: "Nothing landed", rawJSON: "{}"),
+      notes: []
+    )
+
+    let reopened = await service.reopenForNextRound()
+    #expect(reopened)
+    #expect(service.activeAttempt?.status == .inProgress)
+    #expect(service.activeAttempt?.endedAt == nil)
+    #expect(service.activeAttempt?.startedAt ?? .distantPast > attempt.startedAt)
+    // The grade the candidate just saw stays until a new one replaces it.
+    #expect(service.latestEvaluation?.overallScore == 8)
+
+    let persisted = try await storage.attempt(id: attempt.id)
+    #expect(persisted?.status == .inProgress)
+    #expect(persisted?.endedAt == nil)
+  }
+
+  @Test
+  func reopeningIsRefusedWhileTheAttemptIsStillRunning() async throws {
+    let (service, _, root) = makeService()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    _ = try await service.beginAttempt(mode: .codingProject, provider: "claude")
+
+    let reopened = await service.reopenForNextRound()
+    #expect(!reopened)
+    #expect(service.activeAttempt?.status == .inProgress)
+  }
+
+  @Test
   func questionCapturedMidSessionAttachesToAttempt() async throws {
     let (service, storage, root) = makeService()
     defer { try? FileManager.default.removeItem(at: root) }

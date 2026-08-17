@@ -87,7 +87,7 @@ struct LessonResponseEditor: View {
           .keyboardShortcut(.return, modifiers: .command)
 
         Button("I'm Stuck", systemImage: "questionmark.circle", action: onRequestHelp)
-          .buttonStyle(.bordered)
+          .easelSecondaryButton()
           .controlSize(.small)
           .disabled(isLoading)
           .help("\(AppBrand.name) narrows this task without giving you the answer")

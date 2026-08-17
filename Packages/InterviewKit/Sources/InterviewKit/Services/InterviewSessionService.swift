@@ -139,6 +139,36 @@ public final class InterviewSessionService {
     try? await storage.updateAttempt(attempt)
   }
 
+  /// Backs out of a grading request ("End & grade" hit by mistake, or a run
+  /// that stalled): the attempt goes back to work. Only an attempt still
+  /// awaiting its evaluation can be pulled back — once a rubric landed, the
+  /// session is graded and stays that way. Clearing `endedAt` keeps the
+  /// attempt indistinguishable from one that never asked to be graded.
+  @discardableResult
+  public func cancelEvaluationRequest() async -> Bool {
+    guard var attempt = activeAttempt, attempt.status == .awaitingEvaluation else { return false }
+    attempt.status = .inProgress
+    attempt.endedAt = nil
+    activeAttempt = attempt
+    try? await storage.updateAttempt(attempt)
+    return true
+  }
+
+  /// Puts a graded attempt back to work for another round on the same project
+  /// (Coding Project asks the interviewer for an extended task list). The clock
+  /// restarts from now so the new work gets a full session, and the previous
+  /// evaluation stays in storage and on the report until a new one replaces it.
+  @discardableResult
+  public func reopenForNextRound() async -> Bool {
+    guard var attempt = activeAttempt, attempt.status == .evaluated else { return false }
+    attempt.status = .inProgress
+    attempt.endedAt = nil
+    attempt.startedAt = Date.now
+    activeAttempt = attempt
+    try? await storage.updateAttempt(attempt)
+    return true
+  }
+
   public func completeEvaluation(_ evaluation: RubricEvaluation, notes: [ImprovementNote]) async {
     guard var attempt = activeAttempt, evaluation.attemptId == attempt.id else { return }
     try? await storage.saveEvaluation(evaluation, notes: notes)

@@ -136,7 +136,8 @@ struct BuddyAgentInstructionsTests {
       #expect(prompt.contains("candidate") && prompt.contains("Xcode"))
       #expect(prompt.localizedCaseInsensitiveContains("assume") && prompt.localizedCaseInsensitiveContains("compiles"))
     }
-    #expect(prefixes.api.contains("do not paste the whole Xcode project"))
+    #expect(prefixes.api.contains("Do not paste the whole Xcode project"))
+    #expect(prefixes.api.contains("`<Category> Bugs` section per category"))
   }
 
   @Test
