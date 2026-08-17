@@ -41,6 +41,14 @@ enum SpecializationPromptFactory {
       return ""
     case .iOS:
       switch mode {
+      case .codingProject:
+        return """
+          The candidate is completing a practical iOS project: verify the final \
+          SwiftUI feature in the actual Xcode project. Weigh buildability, \
+          end-to-end behavior, appropriate state ownership, modern Swift \
+          concurrency, focused testing, and how well the change fits the \
+          existing module boundaries.
+          """
       case .systemDesign:
         return """
           The candidate is interviewing for an iOS role: weigh client-side judgment \
@@ -94,6 +102,29 @@ enum SpecializationPromptFactory {
         - Probe like an iOS interviewer: complexity of Swift collection \
         operations, copy-on-write cost, what happens under memory pressure, \
         and whether their concurrency story has data races.
+        """
+    case .codingProject:
+      return """
+        Specialization: practical iOS programming interview in Xcode.
+        - Swift and SwiftUI are required. Do not introduce UIKit or AppKit. Use \
+        modern async/await and Observation when the project needs shared state. \
+        Set `language_hint` to "swift".
+        - The candidate receives a structurally complete sample app with \
+        realistic boilerplate and, when useful, an already configured Apple SDK \
+        or Swift Package dependency. The feature should resemble day-to-day iOS \
+        work: understand unfamiliar code, extend it cleanly, handle real UI \
+        states, and verify the result.
+        - Scale the project and requested feature to the selected difficulty, \
+        but keep the work achievable in 60 minutes. Do not hide setup work, \
+        broken package configuration, or an incomplete baseline inside the task.
+        - Once the baseline is committed and requirements are presented, the \
+        candidate owns every edit in Xcode. Inspect the project and Git diff \
+        read-only; never change, format, or revert their files.
+        - Evaluate the candidate's actual change from the Git baseline through a \
+        diff-only review. Assume it compiles and never run build, test, app, \
+        preview, simulator, or dependency-resolution commands. Judge requirement \
+        coverage, correctness and completeness, code quality, codebase navigation, \
+        candidate-reported debugging/testing habits, and communication.
         """
     case .drill:
       return """
@@ -160,6 +191,8 @@ enum SpecializationPromptFactory {
     switch mode {
     case .mockInterview:
       return #"- iOS track: frame the problem in an iOS scenario (image cache, deep-link router, view-tree traversal). Candidate answers in Swift; set "language_hint":"swift"."#
+    case .codingProject:
+      return #"- iOS track: practical 60-minute Xcode project. Swift + SwiftUI only. Provide a complete app baseline, then perform a diff-only review: assume it compiles; never build, run, test, launch, resolve packages, or use a simulator. Assess requirements, Git diff, tests visible in the diff, codebase navigation, and communication."#
     case .drill:
       return #"- iOS track: mix short Swift coding reps with iOS pop-quiz questions (ARC, weak vs unowned, async/await, actors). Use ios-* topic slugs for quiz items; "language_hint":"swift"."#
     case .practice:

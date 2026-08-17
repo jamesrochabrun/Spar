@@ -7,13 +7,12 @@ import Foundation
 import InterviewKit
 
 /// Right-panel surfaces. Availability and the default surface derive from the
-/// active session's mode. Coding modes default to the workspace (the problem
-/// statement is embedded there) and expose hints from a floating editor
-/// popover. Non-coding modes can still use the dedicated hints surface.
+/// active session's mode. Coding Project presents a read-only requirements
+/// surface backed by its Xcode project; other coding modes use the editor.
 public enum StudioSurface: String, CaseIterable, Identifiable {
   case lesson      // the current study-plan lesson: task, source, response editor
   case sources     // read-only passages retrieved from an active Study Space
-  case workspace   // SourceCodeEditorView over the attempt workspace dir, problem embedded
+  case workspace   // source editor, or read-only requirements for Coding Project
   case hints       // strategy guidance, hint budget, question recap
   case whiteboard  // MCP app surface (excalidraw)
   case report      // rubric bars, per-dimension comments, improvement notes
@@ -31,6 +30,13 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
     }
   }
 
+  public func displayName(for mode: SessionMode?) -> String {
+    if self == .workspace, mode == .codingProject {
+      return "Requirements"
+    }
+    return displayName
+  }
+
   public var systemImage: String {
     switch self {
     case .lesson: return "graduationcap"
@@ -42,6 +48,13 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
     }
   }
 
+  public func systemImage(for mode: SessionMode?) -> String {
+    if self == .workspace, mode == .codingProject {
+      return "checklist"
+    }
+    return systemImage
+  }
+
   public static func available(
     for mode: SessionMode?,
     includesSources: Bool = false,
@@ -49,6 +62,8 @@ public enum StudioSurface: String, CaseIterable, Identifiable {
   ) -> [StudioSurface] {
     let modeSurfaces: [StudioSurface]
     switch mode {
+    case .codingProject:
+      modeSurfaces = [.workspace, .report]
     case .systemDesign:
       // Whiteboard leads (and is the default), but the workspace stays
       // available for candidates who want to sketch code or notes alongside

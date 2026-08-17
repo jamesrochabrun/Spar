@@ -85,13 +85,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   static func makeStatusItemImage() -> NSImage? {
-    let image = NSImage(
-      systemSymbolName: AppBrand.symbolName,
-      accessibilityDescription: AppBrand.name
-    )?.withSymbolConfiguration(
-      NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
-    )
-    image?.isTemplate = true
+    guard let image = NSImage(named: NSImage.Name(AppBrand.markAssetName)) else {
+      return nil
+    }
+
+    image.size = NSSize(width: 18, height: 18)
+    image.isTemplate = true
+    image.accessibilityDescription = AppBrand.name
     return image
   }
 

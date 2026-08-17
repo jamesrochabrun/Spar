@@ -64,7 +64,7 @@ struct RepositoryStudyPlanView: View {
       Spacer(minLength: 12)
 
       Button("Choose Random", systemImage: "shuffle", action: studyRandomTopic)
-        .buttonStyle(.bordered)
+        .easelSecondaryButton()
 
       Button(primaryActionTitle(for: plan), systemImage: "play.fill", action: continueLearning)
         .buttonStyle(.borderedProminent)

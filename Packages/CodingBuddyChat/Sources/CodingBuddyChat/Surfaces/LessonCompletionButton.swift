@@ -3,6 +3,7 @@
 //  CodingBuddyChat
 //
 
+import CodingBuddyKit
 import SwiftUI
 
 /// Completion is the learner's call, never the agent's — the agent can only
@@ -21,7 +22,7 @@ struct LessonCompletionButton: View {
       )
       .font(.system(size: 12, weight: .medium))
     }
-    .buttonStyle(.bordered)
+    .easelSecondaryButton()
     .controlSize(.small)
     .tint(isProminent && !isCompleted ? .accentColor : nil)
     .disabled(!isEnabled)

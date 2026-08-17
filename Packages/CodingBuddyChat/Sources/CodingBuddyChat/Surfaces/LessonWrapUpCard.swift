@@ -39,7 +39,7 @@ struct LessonWrapUpCard: View {
         )
 
         Button("Next Item", systemImage: "arrow.right", action: onStartNextItem)
-          .buttonStyle(.bordered)
+          .easelSecondaryButton()
           .controlSize(.small)
           .disabled(isLoading)
       }

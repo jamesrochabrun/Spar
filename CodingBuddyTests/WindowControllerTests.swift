@@ -6,6 +6,7 @@
 import AppKit
 import CodingBuddyChat
 import CodingBuddyKit
+import SwiftUI
 import Testing
 @testable import CodingBuddy
 
@@ -85,6 +86,22 @@ struct WindowControllerTests {
     #expect(controller.canvasWindow.isVisible)
     #expect(controller.canvasWindow.contentView != nil)
     #expect(controller.canvasWindow.alphaValue == 1)
+  }
+
+  @Test
+  func canvasContentDoesNotResizeWindowToFitLongChatContent() throws {
+    let controller = makeWindowController(appState: AppState())
+    defer {
+      controller.canvasWindow.orderOut(nil)
+      controller.capsulePanel.orderOut(nil)
+    }
+
+    controller.showCanvas()
+
+    let hostingView = try #require(
+      controller.canvasWindow.contentView as? NSHostingView<MainContentView>
+    )
+    #expect(hostingView.sizingOptions.isEmpty)
   }
 
   @Test

@@ -223,6 +223,7 @@ final class WindowController: NSObject, WindowControlling, NSWindowDelegate {
         voiceController: voiceController
       )
     )
+    hostingView.sizingOptions = []
     hostingView.translatesAutoresizingMaskIntoConstraints = true
     hostingView.autoresizingMask = [.width, .height]
     canvasWindow.contentView = hostingView

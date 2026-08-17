@@ -52,7 +52,13 @@ public final class InterviewSessionService {
     await leaveActiveAttempt()
 
     let workspaceSlug = question?.title ?? mode.displayName
-    let workspacePath = try? workspaceManager.createWorkspace(slug: workspaceSlug)
+    let workspaceKind: InterviewWorkspaceKind = mode == .codingProject
+      ? .xcodeProject
+      : .scratch
+    let workspacePath = try? workspaceManager.createWorkspace(
+      slug: workspaceSlug,
+      kind: workspaceKind
+    )
 
     let attempt = InterviewAttempt(
       questionId: question?.id,
@@ -104,6 +110,19 @@ public final class InterviewSessionService {
     try? await storage.updateAttempt(attempt)
   }
 
+  /// Starts the candidate-owned portion after asynchronous project preparation.
+  /// Resetting `startedAt` keeps the persisted deadline correct across relaunches.
+  public func startTimedWork() async {
+    guard var attempt = activeAttempt,
+          attempt.status == .inProgress,
+          attempt.plannedDurationSeconds != nil else {
+      return
+    }
+    attempt.startedAt = Date.now
+    activeAttempt = attempt
+    try? await storage.updateAttempt(attempt)
+  }
+
   public func recordHintUsed() async {
     guard var attempt = activeAttempt else { return }
     attempt.hintsUsed += 1
@@ -118,6 +137,36 @@ public final class InterviewSessionService {
     attempt.endedAt = Date()
     activeAttempt = attempt
     try? await storage.updateAttempt(attempt)
+  }
+
+  /// Backs out of a grading request ("End & grade" hit by mistake, or a run
+  /// that stalled): the attempt goes back to work. Only an attempt still
+  /// awaiting its evaluation can be pulled back — once a rubric landed, the
+  /// session is graded and stays that way. Clearing `endedAt` keeps the
+  /// attempt indistinguishable from one that never asked to be graded.
+  @discardableResult
+  public func cancelEvaluationRequest() async -> Bool {
+    guard var attempt = activeAttempt, attempt.status == .awaitingEvaluation else { return false }
+    attempt.status = .inProgress
+    attempt.endedAt = nil
+    activeAttempt = attempt
+    try? await storage.updateAttempt(attempt)
+    return true
+  }
+
+  /// Puts a graded attempt back to work for another round on the same project
+  /// (Coding Project asks the interviewer for an extended task list). The clock
+  /// restarts from now so the new work gets a full session, and the previous
+  /// evaluation stays in storage and on the report until a new one replaces it.
+  @discardableResult
+  public func reopenForNextRound() async -> Bool {
+    guard var attempt = activeAttempt, attempt.status == .evaluated else { return false }
+    attempt.status = .inProgress
+    attempt.endedAt = nil
+    attempt.startedAt = Date.now
+    activeAttempt = attempt
+    try? await storage.updateAttempt(attempt)
+    return true
   }
 
   public func completeEvaluation(_ evaluation: RubricEvaluation, notes: [ImprovementNote]) async {
@@ -136,6 +185,17 @@ public final class InterviewSessionService {
 
   public func abandon() async {
     await leaveActiveAttempt()
+  }
+
+  /// Rolls back an attempt that failed during pre-session project preparation.
+  /// This is intentionally distinct from abandon, which preserves user work.
+  public func discardActiveAttempt() async {
+    guard let attempt = activeAttempt else { return }
+    if let workspacePath = attempt.workspacePath {
+      try? workspaceManager.deleteWorkspace(atPath: workspacePath)
+    }
+    try? await storage.deleteAttempt(id: attempt.id)
+    clearActiveAttempt()
   }
 
   /// Leaves the visible attempt, abandoning unfinished work while preserving

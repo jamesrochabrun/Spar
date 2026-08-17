@@ -35,6 +35,14 @@ The contracts live verbatim in `BuddyAgentInstructions.swift` and the parser fix
 - Use **SwiftUI** exclusively for all UI code — no UIKit or AppKit unless absolutely necessary
 - Prefer declarative patterns over imperative ones
 
+## UI theming and control visibility
+
+- **Every color comes from `EaselDesignSystem.Palette`** (CodingBuddyKit) — never a raw `Color`, a system color like `.blue`, or a hard-coded hex. `Palette.accent` is the app tint and matches the Xcode project's `AccentColor` asset, so the whole app tints from one source.
+- **Every control must be clearly legible in both light and dark**, and that does not happen for free here: the tint is a near-black charcoal (`#2E2F2F`) sitting on a near-black dark canvas (`#0D0F0E`). Anything that leans on the default label color — a plain `Button`, a `.bordered` button, an icon-only toolbar control — renders as dim gray on dark gray and effectively disappears.
+- Use the **scheme-aware** helpers, not the flat constants, wherever a control needs contrast: `Palette.accentForeground(for:)` for a tinted label, `Palette.surfaceElevated(for:)` / `Palette.subtleSurface(for:)` for a fill, `Palette.border(for:)` for the outline that keeps its edge readable. `Palette.accent` on its own is safe only as a `.borderedProminent` tint, where SwiftUI supplies the contrasting white label.
+- Secondary and tertiary actions use **`.easelSecondaryButton()`** (CodingBuddyKit) instead of a bare `.buttonStyle(.bordered)` — it supplies the bordered chrome plus a scheme-aware label color. A test fails the build if a bare `.bordered` button reappears. Anything else that needs a foreground names one from the palette rather than relying on the inherited default.
+- Before calling a new or restyled control done, **check it in both color schemes** (`.preferredColorScheme(.dark)` and `.light` in a preview, or the running app), and confirm its disabled state is still recognizable as a control rather than invisible.
+
 ## Concurrency
 
 - Use **modern Swift concurrency** (`async/await`, `Task`, actors, `AsyncSequence`)

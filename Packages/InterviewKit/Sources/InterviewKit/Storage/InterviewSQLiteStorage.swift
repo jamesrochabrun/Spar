@@ -25,7 +25,7 @@ public actor InterviewSQLiteStorage: InterviewStorageProtocol {
 
   /// Bump when seedTopics gains entries so existing databases re-seed
   /// (inserts are OR IGNORE, so re-running is safe).
-  static let topicSeedVersion = "2"
+  static let topicSeedVersion = "3"
 
   static let seedTopics: [Topic] = {
     let algorithms = [
@@ -49,6 +49,7 @@ public actor InterviewSQLiteStorage: InterviewStorageProtocol {
       ("ios-architecture", "App Architecture"),
       ("ios-performance", "Performance & Instruments"),
       ("ios-testing", "Testing"),
+      ("ios-practical-project", "Practical Project"),
     ]
 
     func displayName(_ slug: String) -> String {

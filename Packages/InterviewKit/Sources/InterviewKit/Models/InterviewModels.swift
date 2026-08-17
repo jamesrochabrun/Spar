@@ -7,6 +7,7 @@ import Foundation
 
 public enum SessionMode: String, Codable, CaseIterable, Sendable, Identifiable {
   case mockInterview = "mock_interview"   // timed, AI interviewer, rubric-graded
+  case codingProject = "coding_project"   // 60-minute SwiftUI feature in an Xcode project
   case practice                           // untimed tutor / study projects
   case systemDesign = "system_design"     // diagram-centric (excalidraw MCP app)
   case behavioral                         // STAR coaching
@@ -17,6 +18,7 @@ public enum SessionMode: String, Codable, CaseIterable, Sendable, Identifiable {
   public var displayName: String {
     switch self {
     case .mockInterview: return "Mock Interview"
+    case .codingProject: return "Coding Project"
     case .practice: return "Practice"
     case .systemDesign: return "System Design"
     case .behavioral: return "Behavioral"
@@ -27,6 +29,7 @@ public enum SessionMode: String, Codable, CaseIterable, Sendable, Identifiable {
   public var systemImage: String {
     switch self {
     case .mockInterview: return "person.crop.circle.badge.clock"
+    case .codingProject: return "hammer"
     case .practice: return "book"
     case .systemDesign: return "rectangle.3.group"
     case .behavioral: return "bubble.left.and.bubble.right"
@@ -38,6 +41,7 @@ public enum SessionMode: String, Codable, CaseIterable, Sendable, Identifiable {
   public var usageSubtitle: String {
     switch self {
     case .mockInterview: return "One timed problem, graded like the real thing"
+    case .codingProject: return "Extend a SwiftUI app in Xcode, then grade the Git diff"
     case .drill: return "Rapid-fire reps, difficulty adapts to you"
     case .practice: return "Untimed tutoring — learn, ask, see solutions"
     case .systemDesign: return "Design on the whiteboard, defend trade-offs"
@@ -48,7 +52,7 @@ public enum SessionMode: String, Codable, CaseIterable, Sendable, Identifiable {
   /// Modes with a countdown timer by default.
   public var isTimedByDefault: Bool {
     switch self {
-    case .mockInterview, .drill: return true
+    case .mockInterview, .codingProject, .drill: return true
     case .practice, .systemDesign, .behavioral: return false
     }
   }
@@ -155,7 +159,8 @@ public struct InterviewAttempt: Identifiable, Codable, Equatable, Sendable {
   public var plannedDurationSeconds: Int?   // nil = untimed
   public var hintBudget: Int
   public var hintsUsed: Int
-  public var workspacePath: String?    // ~/Documents/CodingBuddy/Workspaces/<slug>
+  /// Scratch attempts use `Workspaces`; Coding Project attempts use `Xcode Projects`.
+  public var workspacePath: String?
 
   public init(
     id: String = UUID().uuidString.lowercased(),

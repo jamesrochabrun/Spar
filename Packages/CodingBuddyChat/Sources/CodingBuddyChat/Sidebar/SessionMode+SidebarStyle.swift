@@ -10,6 +10,7 @@ extension SessionMode {
   var sidebarSystemImage: String {
     switch self {
     case .mockInterview: return "person.2"
+    case .codingProject: return "hammer"
     case .practice: return "book.closed"
     case .systemDesign: return "rectangle.3.group"
     case .behavioral: return "bubble.left"
@@ -32,6 +33,12 @@ extension SessionMode {
         red: 138.0 / 255.0,
         green: 118.0 / 255.0,
         blue: 168.0 / 255.0
+      )
+    case .codingProject:
+      return Color(
+        red: 177.0 / 255.0,
+        green: 111.0 / 255.0,
+        blue: 78.0 / 255.0
       )
     case .practice:
       return Color(
@@ -67,6 +74,12 @@ extension SessionMode {
         red: 107.0 / 255.0,
         green: 87.0 / 255.0,
         blue: 136.0 / 255.0
+      )
+    case .codingProject:
+      return Color(
+        red: 138.0 / 255.0,
+        green: 77.0 / 255.0,
+        blue: 48.0 / 255.0
       )
     case .practice:
       return Color(

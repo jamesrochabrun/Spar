@@ -161,6 +161,14 @@ public struct HintsView: View {
 
   private var strategySteps: [(String, String)] {
     switch mode {
+    case .codingProject:
+      return [
+        ("1. Clarify", "Restate the feature and confirm behavior, edge cases, and what done means before editing."),
+        ("2. Navigate", "Find the app entry point, feature boundary, state owner, and existing tests before choosing where the change belongs."),
+        ("3. Ship end-to-end", "Get one complete path working first, then refine structure and secondary states."),
+        ("4. Build and test", "Use Xcode frequently. Add focused tests where they buy confidence and investigate failures instead of guessing."),
+        ("5. Communicate", "Keep the interviewer current on your plan, trade-offs, discoveries, and remaining risk."),
+      ]
     case .systemDesign:
       return [
         ("1. Clarify requirements", "Functional and non-functional: users, scale, latency, consistency. Never design against assumptions you haven't said out loud."),
@@ -189,6 +197,7 @@ public struct HintsView: View {
 
   private var strategyTitle: String {
     switch mode {
+    case .codingProject: return "How to approach a practical project"
     case .systemDesign: return "How to run a design interview"
     case .behavioral: return "Answer with STAR"
     default: return "How to tackle it"

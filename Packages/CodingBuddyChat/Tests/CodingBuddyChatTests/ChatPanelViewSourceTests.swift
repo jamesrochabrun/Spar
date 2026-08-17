@@ -16,7 +16,7 @@ struct ChatPanelViewSourceTests {
     let settings = try sourceContents("Sources/CodingBuddyChat/CodingBuddyChatSettingsView.swift")
 
     #expect(sidebar.contains("Text(AppBrand.name)"))
-    #expect(sidebar.contains("Image(systemName: AppBrand.symbolName)"))
+    #expect(sidebar.contains("Image(AppBrand.markAssetName, bundle: .main)"))
     #expect(chatPanel.contains("appName: AppBrand.name"))
     #expect(settings.contains("appName: AppBrand.name"))
     #expect(!sidebar.contains("Text(\"CodingBuddy\")"))

@@ -20,6 +20,17 @@ struct SessionSurfacePresentationTests {
   }
 
   @Test
+  func codingProjectStaysFocusedOnXcodeAndTheFinalReport() {
+    let surfaces = StudioSurface.available(for: .codingProject)
+
+    #expect(surfaces == [.workspace, .report])
+    #expect(StudioSurface.defaultSurface(for: .codingProject) == .workspace)
+    #expect(StudioSurface.workspace.displayName(for: .codingProject) == "Requirements")
+    #expect(StudioSurface.workspace.systemImage(for: .codingProject) == "checklist")
+    #expect(StudioSurface.workspace.displayName(for: .mockInterview) == "Workspace")
+  }
+
+  @Test
   func sourceBackedSessionsKeepWorkspaceFirstAndDefault() {
     let regular = StudioSurface.available(for: .mockInterview)
     let grounded = StudioSurface.available(for: .mockInterview, includesSources: true)

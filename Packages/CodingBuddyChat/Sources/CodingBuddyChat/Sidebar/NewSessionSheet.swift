@@ -35,6 +35,10 @@ public struct NewSessionSheet: View {
   @State private var knowledgeActivity: KnowledgeActivity
   @State private var sourceAccess: KnowledgeSourceAccess = .openBook
   @State private var isRepositoryImporterPresented = false
+  @State private var usesImportedCodingProject = false
+  @State private var codingProjectBrief = ""
+  @State private var importedCodingProjectURL: URL?
+  @State private var isCodingProjectImporterPresented = false
   @Environment(\.colorScheme) private var colorScheme
 
   private static let durationPresets = [20, 35, 45, 60]
@@ -60,7 +64,7 @@ public struct NewSessionSheet: View {
     self.onCancel = onCancel
     self._mode = State(initialValue: initialMode)
     self._isTimed = State(initialValue: initialMode.isTimedByDefault)
-    self._durationMinutes = State(initialValue: initialMode == .drill ? 20 : 35)
+    self._durationMinutes = State(initialValue: Self.defaultDuration(for: initialMode))
     self._provider = State(initialValue: defaultProvider)
     self._knowledgeActivity = State(
       initialValue: initialMode == .practice ? .learn : .interview
@@ -73,9 +77,11 @@ public struct NewSessionSheet: View {
 
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
-          studySpaceSection
+          if mode != .codingProject {
+            studySpaceSection
+          }
 
-          if selectedStudySpaceID != nil {
+          if selectedStudySpaceID != nil && mode != .codingProject {
             activitySection
           }
 
@@ -84,7 +90,14 @@ public struct NewSessionSheet: View {
           }
 
           if !isKnowledgeLearning {
-            if isKnowledgeSession {
+            if mode == .codingProject {
+              CodingProjectSetupSection(
+                usesImportedProject: $usesImportedCodingProject,
+                projectBrief: $codingProjectBrief,
+                importedProjectURL: importedCodingProjectURL,
+                onChooseProject: { isCodingProjectImporterPresented = true }
+              )
+            } else if isKnowledgeSession {
               groundedQuestionNote
             } else if mode != .behavioral {
               topicSection
@@ -105,7 +118,7 @@ public struct NewSessionSheet: View {
 
           providerSection
 
-          if selectedStudySpaceID == nil && !relevantBankQuestions.isEmpty {
+          if mode != .codingProject && selectedStudySpaceID == nil && !relevantBankQuestions.isEmpty {
             retrySection
           }
         }
@@ -120,7 +133,10 @@ public struct NewSessionSheet: View {
       selectedTopicIds.removeAll()
       selectedBankQuestionId = nil
       isTimed = newMode.isTimedByDefault
-      durationMinutes = newMode == .drill ? 20 : 35
+      durationMinutes = Self.defaultDuration(for: newMode)
+      if newMode == .codingProject {
+        selectedStudySpaceID = nil
+      }
     }
     .onChange(of: knowledgeActivity) { _, activity in
       switch activity {
@@ -141,6 +157,9 @@ public struct NewSessionSheet: View {
       selectedTopicIds.removeAll()
       selectedBankQuestionId = nil
       guard studySpaceID != nil else { return }
+      if mode == .codingProject {
+        mode = .mockInterview
+      }
       knowledgeActivity = mode == .practice ? .learn : .interview
     }
     .fileImporter(
@@ -148,6 +167,12 @@ public struct NewSessionSheet: View {
       allowedContentTypes: [.folder],
       allowsMultipleSelection: false,
       onCompletion: importRepository
+    )
+    .fileImporter(
+      isPresented: $isCodingProjectImporterPresented,
+      allowedContentTypes: [.folder],
+      allowsMultipleSelection: false,
+      onCompletion: selectCodingProject
     )
     .task {
       await knowledgeLibrary.load()
@@ -347,7 +372,7 @@ public struct NewSessionSheet: View {
 
   private var availableModes: [SessionMode] {
     if selectedStudySpaceID != nil {
-      return ModeGroup.displayOrder.filter { $0 != .practice }
+      return ModeGroup.displayOrder.filter { $0 != .practice && $0 != .codingProject }
     }
     return ModeGroup.displayOrder
   }
@@ -420,7 +445,7 @@ public struct NewSessionSheet: View {
 
   private var difficultySection: some View {
     VStack(alignment: .leading, spacing: 8) {
-      sectionTitle("Difficulty")
+      sectionTitle(mode == .codingProject ? "Project complexity" : "Difficulty")
       Picker("Difficulty", selection: $difficulty) {
         ForEach(Difficulty.allCases) { difficulty in
           Text(difficulty.displayName).tag(difficulty)
@@ -428,28 +453,40 @@ public struct NewSessionSheet: View {
       }
       .pickerStyle(.segmented)
       .labelsHidden()
+
+      if mode == .codingProject {
+        Text("Complexity changes the size of the provided codebase and feature, while keeping the exercise achievable in 60 minutes.")
+          .font(.callout)
+          .foregroundStyle(.secondary)
+      }
     }
   }
 
   private var durationSection: some View {
     VStack(alignment: .leading, spacing: 8) {
-      HStack {
+      if mode == .codingProject {
         sectionTitle("Duration")
-        Spacer()
-        Toggle("Timed", isOn: $isTimed)
-          .toggleStyle(.switch)
-          .controlSize(.mini)
-          .disabled(mode == .practice)
-      }
-
-      if isTimed {
-        Picker("Duration", selection: $durationMinutes) {
-          ForEach(Self.durationPresets, id: \.self) { minutes in
-            Text("\(minutes) min").tag(minutes)
-          }
+        Label("60-minute practical interview", systemImage: "clock")
+          .font(.callout)
+      } else {
+        HStack {
+          sectionTitle("Duration")
+          Spacer()
+          Toggle("Timed", isOn: $isTimed)
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+            .disabled(mode == .practice)
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
+
+        if isTimed {
+          Picker("Duration", selection: $durationMinutes) {
+            ForEach(Self.durationPresets, id: \.self) { minutes in
+              Text("\(minutes) min").tag(minutes)
+            }
+          }
+          .pickerStyle(.segmented)
+          .labelsHidden()
+        }
       }
     }
   }
@@ -539,7 +576,10 @@ public struct NewSessionSheet: View {
       }
       .keyboardShortcut(.defaultAction)
       .buttonStyle(.borderedProminent)
-      .disabled(knowledgeLibrary.isImporting)
+      .disabled(
+        knowledgeLibrary.isImporting ||
+          (mode == .codingProject && usesImportedCodingProject && importedCodingProjectURL == nil)
+      )
     }
     .padding(.horizontal, 20)
     .frame(height: 60)
@@ -565,11 +605,24 @@ public struct NewSessionSheet: View {
           activity: knowledgeActivity,
           sourceAccess: sourceAccess
         )
-      }
+      },
+      codingProjectSource: codingProjectSource,
+      codingProjectBrief: mode == .codingProject
+        ? CodingProjectBrief.normalized(codingProjectBrief)
+        : nil
     )
   }
 
+  private var codingProjectSource: CodingProjectSource? {
+    guard mode == .codingProject else { return nil }
+    if usesImportedCodingProject, let importedCodingProjectURL {
+      return .imported(importedCodingProjectURL)
+    }
+    return .generated
+  }
+
   private var startButtonTitle: String {
+    if mode == .codingProject { return "Prepare Project" }
     guard selectedStudySpaceID != nil else { return "Start Session" }
     return knowledgeActivity == .learn ? "Start Learning" : "Start Interview"
   }
@@ -582,6 +635,19 @@ public struct NewSessionSheet: View {
       if let studySpace = await knowledgeLibrary.addRepository(at: repositoryURL) {
         selectedStudySpaceID = studySpace.id
       }
+    }
+  }
+
+  private func selectCodingProject(_ result: Result<[URL], Error>) {
+    guard case .success(let urls) = result else { return }
+    importedCodingProjectURL = urls.first
+  }
+
+  private static func defaultDuration(for mode: SessionMode) -> Int {
+    switch mode {
+    case .drill: return 20
+    case .codingProject: return 60
+    default: return 35
     }
   }
 

@@ -16,11 +16,33 @@ struct InterviewWorkspaceManagerTests {
     let root = temporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let manager = InterviewWorkspaceManager(rootDirectory: root)
-    let workspacePath = try manager.createWorkspace(slug: "Delete Me")
+    let workspacePath = try manager.createWorkspace(slug: "Delete Me", kind: .scratch)
 
     try manager.deleteWorkspace(atPath: workspacePath)
 
     #expect(!FileManager.default.fileExists(atPath: workspacePath))
+  }
+
+  @Test
+  func keepsXcodeProjectsInTheirOwnManagedRoot() throws {
+    let root = temporaryRoot()
+    let workspaces = root.appendingPathComponent("Workspaces", isDirectory: true)
+    let projects = root.appendingPathComponent("Xcode Projects", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let manager = InterviewWorkspaceManager(
+      rootDirectory: workspaces,
+      xcodeProjectsRootDirectory: projects
+    )
+
+    let scratchPath = try manager.createWorkspace(slug: "Array Drill", kind: .scratch)
+    let projectPath = try manager.createWorkspace(slug: "Coding Project", kind: .xcodeProject)
+
+    #expect(URL(fileURLWithPath: scratchPath).deletingLastPathComponent() == workspaces)
+    #expect(URL(fileURLWithPath: projectPath).deletingLastPathComponent() == projects)
+    #expect(FileManager.default.fileExists(atPath: projectPath))
+
+    try manager.deleteWorkspace(atPath: projectPath)
+    #expect(!FileManager.default.fileExists(atPath: projectPath))
   }
 
   @Test

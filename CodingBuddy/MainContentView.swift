@@ -25,6 +25,9 @@ struct MainContentView: View {
   @State private var selectedSurface: StudioSurface = .workspace
   @State private var contentMode: MainContentMode = .session
   @State private var isReportGenerationRequested = false
+  /// Surface the candidate was on when grading started, so cancelling puts
+  /// them back where they were working instead of on an empty report.
+  @State private var surfaceBeforeGrading: StudioSurface?
   @State private var isChatInputFocusRequested = false
   @State private var isWhiteboardCreationRequested = false
   @State private var isLessonLibraryPresented = false
@@ -125,6 +128,7 @@ struct MainContentView: View {
       vm.onStartSession = { request in
         contentMode.showSession()
         isReportGenerationRequested = false
+        surfaceBeforeGrading = nil
         selectedSurface = StudioSurface.defaultSurface(
           for: request.mode,
           isLearningSession: request.knowledgeConfiguration?.activity == .learn
@@ -137,6 +141,7 @@ struct MainContentView: View {
       }
       chatService.onEvaluationRecorded = { _ in
         isReportGenerationRequested = false
+        surfaceBeforeGrading = nil
         selectedSurface = .report
       }
       vm.onDashboardToggle = {
@@ -439,15 +444,29 @@ struct MainContentView: View {
         .accessibilityHidden(selectedSurface != .hints)
 
         if availableSurfaces.contains(.workspace) {
-          WorkspaceEditorView(
-            workspacePath: chatService.interviewSession.activeAttempt?.workspacePath,
-            question: chatService.interviewSession.activeQuestion,
-            externalRefreshToken: chatService.workspaceRevision,
-            onReviewRequested: { fileName in
-              chatService.requestReview(fileName: fileName)
-            },
-            floatingAccessory: workspaceHintsAccessory
-          )
+          Group {
+            if chatService.currentMode == .codingProject {
+              CodingProjectRequirementsView(
+                workspacePath: chatService.interviewSession.activeAttempt?.workspacePath,
+                question: chatService.interviewSession.activeQuestion,
+                externalRefreshToken: chatService.workspaceRevision,
+                canRegenerate: chatService.canRegenerateCodingProjectRequirements,
+                isRegenerating: chatService.isRegeneratingCodingProject,
+                onRegenerate: regenerateCodingProjectRequirements
+              )
+            } else {
+              WorkspaceEditorView(
+                workspacePath: chatService.interviewSession.activeAttempt?.workspacePath,
+                question: chatService.interviewSession.activeQuestion,
+                externalRefreshToken: chatService.workspaceRevision,
+                onReviewRequested: { fileName in
+                  chatService.requestReview(fileName: fileName)
+                },
+                floatingAccessory: workspaceHintsAccessory
+              )
+            }
+          }
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
           .opacity(selectedSurface == .workspace ? 1 : 0)
           .allowsHitTesting(selectedSurface == .workspace)
           .accessibilityHidden(selectedSurface != .workspace)
@@ -460,13 +479,7 @@ struct MainContentView: View {
             .accessibilityHidden(selectedSurface != .whiteboard)
         }
 
-        SessionReportView(
-          evaluation: chatService.interviewSession.latestEvaluation,
-          notes: chatService.interviewSession.latestNotes,
-          attempt: chatService.interviewSession.activeAttempt,
-          isGenerating: isReportGenerationRequested,
-          drillRun: chatService.interviewSession.drillRun
-        )
+        reportSurface
         .opacity(selectedSurface == .report ? 1 : 0)
         .allowsHitTesting(selectedSurface == .report)
         .accessibilityHidden(selectedSurface != .report)
@@ -484,6 +497,7 @@ struct MainContentView: View {
     }
     .onChange(of: chatService.currentSessionId) { _, _ in
       isReportGenerationRequested = false
+      surfaceBeforeGrading = nil
       isWhiteboardCreationRequested = false
       selectedSurface = currentDefaultSurface
       // Restored sessions with a report jump straight to it — but a learning
@@ -512,6 +526,36 @@ struct MainContentView: View {
         isWhiteboardCreationRequested = false
       }
     }
+  }
+
+  private var reportSurface: some View {
+    let session = chatService.interviewSession
+    var cancelAction: (() -> Void)?
+    if chatService.canCancelGrading {
+      cancelAction = { cancelGrading() }
+    }
+    return SessionReportView(
+      evaluation: session.latestEvaluation,
+      notes: session.latestNotes,
+      attempt: session.activeAttempt,
+      isGenerating: isReportGenerationRequested,
+      drillRun: session.drillRun,
+      onCancelGrading: cancelAction,
+      headerAccessory: reportRegenerationAccessory
+    )
+  }
+
+  /// A graded coding project can keep going: the report offers the same
+  /// Regenerate control as the Requirements surface.
+  private var reportRegenerationAccessory: AnyView? {
+    guard chatService.currentMode == .codingProject else { return nil }
+    return AnyView(
+      CodingProjectRegenerateButton(
+        canRegenerate: chatService.canRegenerateCodingProjectRequirements,
+        isRegenerating: chatService.isRegeneratingCodingProject,
+        onRegenerate: regenerateCodingProjectRequirements
+      )
+    )
   }
 
   @ViewBuilder
@@ -575,13 +619,19 @@ struct MainContentView: View {
     HStack(spacing: 12) {
       Picker("Surface", selection: $selectedSurface) {
         ForEach(availableSurfaces) { surface in
-          Label(surface.displayName, systemImage: surface.systemImage)
+          Label(
+            surface.displayName(for: chatService.currentMode),
+            systemImage: surface.systemImage(for: chatService.currentMode)
+          )
             .tag(surface)
         }
       }
       .pickerStyle(.segmented)
       .labelsHidden()
-      .frame(width: CGFloat(availableSurfaces.count) * 92)
+      .frame(
+        width: CGFloat(availableSurfaces.count)
+          * (chatService.currentMode == .codingProject ? 116 : 92)
+      )
 
       Spacer()
 
@@ -669,10 +719,31 @@ struct MainContentView: View {
   }
 
   private func endAndGrade() {
+    surfaceBeforeGrading = selectedSurface
     isReportGenerationRequested = true
     selectedSurface = .report
     Task {
       await chatService.endAndGrade()
+    }
+  }
+
+  /// Regenerating from the report leaves the grade behind: the new task list
+  /// lands on the Requirements surface, so that is where the candidate watches
+  /// the interviewer rebuild it.
+  private func regenerateCodingProjectRequirements(details: String) {
+    Task {
+      guard await chatService.regenerateCodingProjectRequirements(details: details) else { return }
+      selectedSurface = .workspace
+    }
+  }
+
+  private func cancelGrading() {
+    Task {
+      guard await chatService.cancelGrading() else { return }
+      isReportGenerationRequested = false
+      let restored = surfaceBeforeGrading ?? currentDefaultSurface
+      selectedSurface = availableSurfaces.contains(restored) ? restored : currentDefaultSurface
+      surfaceBeforeGrading = nil
     }
   }
 

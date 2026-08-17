@@ -80,9 +80,10 @@ public struct SidebarView: View {
 
   private var headerView: some View {
     HStack(alignment: .center, spacing: 5) {
-      Image(systemName: AppBrand.symbolName)
-        .font(.system(size: 15, weight: .medium))
-        .symbolRenderingMode(.hierarchical)
+      Image(AppBrand.markAssetName, bundle: .main)
+        .resizable()
+        .renderingMode(.template)
+        .scaledToFit()
         .foregroundStyle(headerIconForegroundColor)
         .frame(width: 16, height: 16)
         .accessibilityHidden(true)

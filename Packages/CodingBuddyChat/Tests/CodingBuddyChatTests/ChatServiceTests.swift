@@ -67,6 +67,18 @@ struct ChatServiceTests {
   }
 
   @Test
+  func regenerationIsRefusedWithoutACodingProjectExercise() async {
+    let service = ChatService(sessionStorage: NoOpSessionStorage())
+    await service.initialize()
+
+    #expect(!service.canRegenerateCodingProjectRequirements)
+
+    let sent = await service.regenerateCodingProjectRequirements(details: "more bugs")
+    #expect(!sent)
+    #expect(!service.isRegeneratingCodingProject)
+  }
+
+  @Test
   func clearingActiveWorkspaceDropsSessionState() async {
     let service = ChatService(sessionStorage: NoOpSessionStorage())
     await service.initialize()

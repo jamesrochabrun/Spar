@@ -15,6 +15,8 @@ public struct SessionReportView: View {
   private let attempt: InterviewAttempt?
   private let isGenerating: Bool
   private let drillRun: DrillRun
+  private let onCancelGrading: (() -> Void)?
+  private let headerAccessory: AnyView?
 
   @Environment(\.colorScheme) private var colorScheme
 
@@ -23,13 +25,17 @@ public struct SessionReportView: View {
     notes: [ImprovementNote],
     attempt: InterviewAttempt?,
     isGenerating: Bool = false,
-    drillRun: DrillRun = DrillRun()
+    drillRun: DrillRun = DrillRun(),
+    onCancelGrading: (() -> Void)? = nil,
+    headerAccessory: AnyView? = nil
   ) {
     self.evaluation = evaluation
     self.notes = notes
     self.attempt = attempt
     self.isGenerating = isGenerating
     self.drillRun = drillRun
+    self.onCancelGrading = onCancelGrading
+    self.headerAccessory = headerAccessory
   }
 
   public var body: some View {
@@ -44,7 +50,7 @@ public struct SessionReportView: View {
           evaluationContent(evaluation)
         }
       case .grading:
-        GradingReportProgressView()
+        GradingReportProgressView(onCancel: onCancelGrading)
       case .empty:
         ContentUnavailableView {
           Label("No evaluation yet", systemImage: "chart.bar.doc.horizontal")
@@ -108,6 +114,12 @@ public struct SessionReportView: View {
       }
 
       Spacer()
+
+      // Where the session continues from — a Coding Project puts its
+      // "Regenerate" control here so more work is one click from the grade.
+      if let headerAccessory {
+        headerAccessory
+      }
     }
   }
 

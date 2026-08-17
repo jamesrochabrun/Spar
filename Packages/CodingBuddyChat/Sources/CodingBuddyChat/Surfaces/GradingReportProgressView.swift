@@ -7,6 +7,9 @@ import CodingBuddyKit
 import SwiftUI
 
 struct GradingReportProgressView: View {
+  /// Nil while the attempt can no longer be pulled back out of grading.
+  var onCancel: (() -> Void)?
+
   @Environment(\.colorScheme) private var colorScheme
 
   var body: some View {
@@ -37,6 +40,13 @@ struct GradingReportProgressView: View {
         statusChip("Correctness", systemImage: "checkmark.circle")
         statusChip("Complexity", systemImage: "function")
         statusChip("Communication", systemImage: "bubble.left.and.bubble.right")
+      }
+
+      if let onCancel {
+        Button("Cancel grading", systemImage: "arrow.uturn.backward", action: onCancel)
+          .easelSecondaryButton()
+          .controlSize(.small)
+          .help("Stop grading and go back to the session")
       }
     }
     .padding(30)
