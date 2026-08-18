@@ -44,6 +44,7 @@ public struct CodingBuddyChatSettingsView: View {
           AnyView(
             CodingBuddySettingsSections(
               interviewSettings: service.interviewSettings,
+              ruleLibrary: service.ruleLibrary,
               voiceController: voiceController
             )
           )

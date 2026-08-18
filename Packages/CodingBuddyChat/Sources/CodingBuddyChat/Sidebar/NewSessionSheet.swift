@@ -20,6 +20,7 @@ public struct NewSessionSheet: View {
   private let specialization: InterviewSpecialization
   private let isModeSelectionLocked: Bool
   @Bindable private var knowledgeLibrary: KnowledgeLibraryService
+  @Bindable private var ruleLibrary: FileRuleLibrary
   private let onStart: (ChatService.NewSessionRequest) -> Void
   private let onCancel: () -> Void
 
@@ -35,6 +36,8 @@ public struct NewSessionSheet: View {
   @State private var knowledgeActivity: KnowledgeActivity
   @State private var sourceAccess: KnowledgeSourceAccess = .openBook
   @State private var isRepositoryImporterPresented = false
+  @State private var selectedRuleSetIDs: Set<String>
+  @State private var isRulesImporterPresented = false
   @State private var usesImportedCodingProject = false
   @State private var codingProjectBrief = ""
   @State private var importedCodingProjectURL: URL?
@@ -51,6 +54,8 @@ public struct NewSessionSheet: View {
     specialization: InterviewSpecialization = .default,
     isModeSelectionLocked: Bool = false,
     knowledgeLibrary: KnowledgeLibraryService,
+    ruleLibrary: FileRuleLibrary,
+    defaultRuleSetIDs: [String] = [],
     onStart: @escaping (ChatService.NewSessionRequest) -> Void,
     onCancel: @escaping () -> Void
   ) {
@@ -60,8 +65,10 @@ public struct NewSessionSheet: View {
     self.specialization = specialization
     self.isModeSelectionLocked = isModeSelectionLocked
     self.knowledgeLibrary = knowledgeLibrary
+    self.ruleLibrary = ruleLibrary
     self.onStart = onStart
     self.onCancel = onCancel
+    self._selectedRuleSetIDs = State(initialValue: Set(defaultRuleSetIDs))
     self._mode = State(initialValue: initialMode)
     self._isTimed = State(initialValue: initialMode.isTimedByDefault)
     self._durationMinutes = State(initialValue: Self.defaultDuration(for: initialMode))
@@ -115,6 +122,8 @@ public struct NewSessionSheet: View {
               hintSection
             }
           }
+
+          rulesSection
 
           providerSection
 
@@ -174,8 +183,15 @@ public struct NewSessionSheet: View {
       allowsMultipleSelection: false,
       onCompletion: selectCodingProject
     )
+    .fileImporter(
+      isPresented: $isRulesImporterPresented,
+      allowedContentTypes: Self.ruleDocumentTypes,
+      allowsMultipleSelection: true,
+      onCompletion: importRules
+    )
     .task {
       await knowledgeLibrary.load()
+      ruleLibrary.load()
     }
   }
 
@@ -276,6 +292,54 @@ public struct NewSessionSheet: View {
           .foregroundStyle(EaselDesignSystem.Palette.danger)
       }
     }
+  }
+
+  /// Engineering rules the agent follows when it generates this session's work
+  /// and enforces when it reviews it. Unlike a Study Space these are not
+  /// indexed or retrieved — they go into the session prompt verbatim.
+  private var rulesSection: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack {
+        sectionTitle("Rules (optional)")
+        Spacer()
+        if !ruleLibrary.ruleSets.isEmpty {
+          // Matches the Study Space section's "Add Repository": the default
+          // button style keeps its contrast here, where small bordered chrome
+          // washes out against the dark canvas.
+          Button("Add Rules", systemImage: "doc.badge.plus") {
+            isRulesImporterPresented = true
+          }
+          .controlSize(.small)
+        }
+      }
+
+      RuleSetSelectionList(
+        library: ruleLibrary,
+        selectedIDs: $selectedRuleSetIDs,
+        onAddRules: { isRulesImporterPresented = true }
+      )
+
+      if !ruleLibrary.ruleSets.isEmpty {
+        Text("Checked rules are followed when the interviewer generates work and enforced when it reviews yours.")
+          .font(.callout)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+  }
+
+  private func importRules(_ result: Result<[URL], Error>) {
+    guard case .success(let urls) = result else { return }
+    for url in urls {
+      ruleLibrary.importRules(from: url)
+    }
+    // Newly added rules are opt-in for this session, matching the Study Space
+    // importer: adding a source never silently changes what the session runs.
+  }
+
+  private static var ruleDocumentTypes: [UTType] {
+    [UTType(filenameExtension: "md"), UTType(filenameExtension: "markdown"), .plainText]
+      .compactMap { $0 }
   }
 
   private func indexSummary(for studySpace: StudySpace) -> String {
@@ -609,7 +673,12 @@ public struct NewSessionSheet: View {
       codingProjectSource: codingProjectSource,
       codingProjectBrief: mode == .codingProject
         ? CodingProjectBrief.normalized(codingProjectBrief)
-        : nil
+        : nil,
+      // Order follows the library so the prompt reads the same way twice, and
+      // ids for rules deleted since selection simply drop out.
+      ruleSetIDs: ruleLibrary.ruleSets
+        .map(\.id)
+        .filter(selectedRuleSetIDs.contains)
     )
   }
 

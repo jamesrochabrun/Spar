@@ -26,6 +26,12 @@ struct ChatSessionContext {
   let mode: SessionMode
   let specialization: InterviewSpecialization
   let knowledgeConfiguration: KnowledgeSessionConfiguration?
+  /// House rules resolved when the session was created. Held here so the
+  /// grading and task-list turns enforce the same rules the session was
+  /// generated under, even if the library changed meanwhile.
+  let ruleContext: RuleContext
+  /// The ids behind `ruleContext`, persisted once the chat session gets an id.
+  let ruleSetIDs: [String]
   let mcpContextKey: String
 }
 
@@ -75,6 +81,8 @@ public final class ChatService: ChatServiceProtocol {
   public let sessionTimer = SessionTimer()
   public let mcpApps: MCPAppSessionService
   public let knowledgeLibrary: KnowledgeLibraryService
+  /// Candidate-authored rule sets, attachable per session.
+  public let ruleLibrary: FileRuleLibrary
   /// Interview preferences (specialization track). Read at session-context
   /// creation, so a settings change applies to the next session started.
   public let interviewSettings: BuddyInterviewSettings
@@ -171,6 +179,9 @@ public final class ChatService: ChatServiceProtocol {
   private let mcpToolsDiscovery: MCPToolsDiscoveryService
   private let logger: ClaudeCodeLogger
   private let codingProjectPreparer: any CodingProjectPreparing
+  /// Which rule sets each chat session was started with, so a resumed session
+  /// runs under the same rules.
+  private let ruleBindings: any SessionRuleBindingStoring
   private var currentWorkspaceUsageTask: Task<Void, Never>?
   private var sessionContextsById: [String: ChatSessionContext] = [:]
   private var pendingSessionContextsByViewModelId: [ObjectIdentifier: ChatSessionContext] = [:]
@@ -202,6 +213,8 @@ public final class ChatService: ChatServiceProtocol {
     workspaceManager: (any InterviewWorkspaceManaging)? = nil,
     interviewSettings: BuddyInterviewSettings? = nil,
     knowledgeLibrary: KnowledgeLibraryService? = nil,
+    ruleLibrary: FileRuleLibrary? = nil,
+    ruleBindings: (any SessionRuleBindingStoring)? = nil,
     codingProjectPreparer: (any CodingProjectPreparing)? = nil,
     persistentPreferencesManager: PersistentPreferencesManager? = nil,
     mcpToolsDiscovery: MCPToolsDiscoveryService = MCPToolsDiscoveryService(),
@@ -212,6 +225,8 @@ public final class ChatService: ChatServiceProtocol {
     self.interviewStorage = resolvedInterviewStorage
     self.interviewSettings = interviewSettings ?? BuddyInterviewSettings()
     self.knowledgeLibrary = knowledgeLibrary ?? KnowledgeLibraryService()
+    self.ruleLibrary = ruleLibrary ?? FileRuleLibrary()
+    self.ruleBindings = ruleBindings ?? FileSessionRuleBindingStore()
     self.codingProjectPreparer = codingProjectPreparer ?? CodingProjectPreparationService()
     self.interviewSession = InterviewSessionService(
       storage: resolvedInterviewStorage,
@@ -257,6 +272,7 @@ public final class ChatService: ChatServiceProtocol {
 
     do {
       await knowledgeLibrary.load()
+      ruleLibrary.load()
       let globalPrefs = GlobalPreferencesStorage(
         persistentManager: persistentPreferencesManager,
         logger: logger
@@ -324,6 +340,8 @@ public final class ChatService: ChatServiceProtocol {
     public var studyPlanFocus: StudyPlanFocus?
     public var codingProjectSource: CodingProjectSource?
     public var codingProjectBrief: String?
+    /// Ids of the house-rule sets to run this session under.
+    public var ruleSetIDs: [String]
 
     public init(
       mode: SessionMode,
@@ -336,7 +354,8 @@ public final class ChatService: ChatServiceProtocol {
       knowledgeConfiguration: KnowledgeSessionConfiguration? = nil,
       studyPlanFocus: StudyPlanFocus? = nil,
       codingProjectSource: CodingProjectSource? = nil,
-      codingProjectBrief: String? = nil
+      codingProjectBrief: String? = nil,
+      ruleSetIDs: [String] = []
     ) {
       self.mode = mode
       self.question = question
@@ -349,6 +368,7 @@ public final class ChatService: ChatServiceProtocol {
       self.studyPlanFocus = studyPlanFocus
       self.codingProjectSource = codingProjectSource
       self.codingProjectBrief = CodingProjectBrief.normalized(codingProjectBrief)
+      self.ruleSetIDs = ruleSetIDs
     }
   }
 
@@ -408,7 +428,8 @@ public final class ChatService: ChatServiceProtocol {
       context = try makeSessionContext(
         mode: request.mode,
         workingDirectory: attempt.workspacePath,
-        knowledgeConfiguration: request.knowledgeConfiguration
+        knowledgeConfiguration: request.knowledgeConfiguration,
+        ruleSetIDs: request.ruleSetIDs
       )
     } catch {
       initError = error
@@ -557,7 +578,8 @@ public final class ChatService: ChatServiceProtocol {
         source: request.codingProjectSource ?? .generated,
         difficulty: request.difficulty ?? .medium,
         variationSeed: UUID().uuidString.lowercased(),
-        projectBrief: request.codingProjectBrief
+        projectBrief: request.codingProjectBrief,
+        ruleContext: activeSessionContext?.ruleContext ?? .empty
       )
     } else if let configuration = request.knowledgeConfiguration,
        configuration.activity == .learn {
@@ -725,7 +747,11 @@ public final class ChatService: ChatServiceProtocol {
     // back to the current setting for restored sessions.
     let specialization = activeSessionContext?.specialization ?? interviewSettings.specialization
     sendMessageToViewModel(
-      BuddyAgentInstructions.evaluationDirective(mode: attempt.mode, specialization: specialization)
+      BuddyAgentInstructions.evaluationDirective(
+        mode: attempt.mode,
+        specialization: specialization,
+        ruleContext: activeSessionContext?.ruleContext ?? .empty
+      )
     )
   }
 
@@ -773,7 +799,8 @@ public final class ChatService: ChatServiceProtocol {
       BuddyAgentInstructions.codingProjectExtensionMessage(
         currentPrompt: question.promptMarkdown,
         lastOverallScore: interviewSession.latestEvaluation?.overallScore,
-        details: details
+        details: details,
+        ruleContext: activeSessionContext?.ruleContext ?? .empty
       )
     )
     return true
@@ -864,7 +891,8 @@ public final class ChatService: ChatServiceProtocol {
         context = try makeSessionContext(
           mode: mode,
           workingDirectory: sessionToLoad.workingDirectory,
-          knowledgeConfiguration: knowledgeConfiguration
+          knowledgeConfiguration: knowledgeConfiguration,
+          ruleSetIDs: ruleBindings.ruleSetIDs(chatSessionID: sessionToLoad.id)
         )
       } catch {
         initError = error
@@ -919,6 +947,7 @@ public final class ChatService: ChatServiceProtocol {
     do {
       try await interviewSession.deleteAttempt(forChatSessionId: session.id)
       await knowledgeLibrary.deleteSessionBinding(chatSessionID: session.id)
+      ruleBindings.delete(chatSessionID: session.id)
       try await sessionStorage.deleteSession(id: session.id)
     } catch {
       chatLog.error(
@@ -993,7 +1022,8 @@ public final class ChatService: ChatServiceProtocol {
     mode: SessionMode,
     globalPreferences preferences: GlobalPreferencesStorage? = nil,
     workingDirectory: String? = nil,
-    knowledgeConfiguration: KnowledgeSessionConfiguration? = nil
+    knowledgeConfiguration: KnowledgeSessionConfiguration? = nil,
+    ruleSetIDs: [String] = []
   ) throws -> ChatSessionContext {
     guard let preferences = preferences ?? globalPreferences else {
       throw ChatServiceError.missingGlobalPreferences
@@ -1017,10 +1047,14 @@ public final class ChatService: ChatServiceProtocol {
     }
 
     let specialization = interviewSettings.specialization
+    // Bodies are read from disk here rather than cached, so a rules file edited
+    // outside the app applies to this session.
+    let ruleContext = ruleLibrary.resolve(ids: ruleSetIDs)
     let prefixes = BuddyAgentInstructions.prefixes(
       for: mode,
       specialization: specialization,
-      knowledgeConfiguration: knowledgeConfiguration
+      knowledgeConfiguration: knowledgeConfiguration,
+      ruleContext: ruleContext
     )
 
     let client = try ClaudeCodeClient(configuration: config)
@@ -1107,6 +1141,8 @@ public final class ChatService: ChatServiceProtocol {
       mode: mode,
       specialization: specialization,
       knowledgeConfiguration: knowledgeConfiguration,
+      ruleContext: ruleContext,
+      ruleSetIDs: ruleSetIDs,
       mcpContextKey: mcpContextKey
     )
   }
@@ -1331,6 +1367,9 @@ public final class ChatService: ChatServiceProtocol {
           configuration: configuration
         )
       }
+    }
+    if !context.ruleSetIDs.isEmpty {
+      ruleBindings.save(ruleSetIDs: context.ruleSetIDs, chatSessionID: sessionId)
     }
 
     setCurrentSessionId(sessionId)

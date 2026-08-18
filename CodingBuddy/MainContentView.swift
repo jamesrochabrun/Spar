@@ -295,6 +295,8 @@ struct MainContentView: View {
       specialization: chatService.interviewSettings.specialization,
       isModeSelectionLocked: sidebarVM.isNewSessionModeSelectionLocked,
       knowledgeLibrary: chatService.knowledgeLibrary,
+      ruleLibrary: chatService.ruleLibrary,
+      defaultRuleSetIDs: chatService.interviewSettings.defaultRuleSetIDs,
       onStart: { request in
         sidebarVM.isNewSessionSheetPresented = false
         sidebarVM.preparePendingNewSession(
