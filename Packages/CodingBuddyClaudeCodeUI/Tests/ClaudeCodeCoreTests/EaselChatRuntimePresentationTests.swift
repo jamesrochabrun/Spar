@@ -384,6 +384,56 @@ final class CodingBuddyChatRuntimePresentationTests: XCTestCase {
     XCTAssertNil(title)
   }
 
+  func testActiveActivityTitleIgnoresUnfinishedToolUseFromEarlierTurn() {
+    // An image attachment whose Read never reported a result used to keep
+    // captioning the loading indicator on every later message, so the same path
+    // reappeared turn after turn and looked like a repeated upload.
+    let firstUserMessage = ChatMessage(role: .user, content: "What is in this screenshot?")
+    let staleImageRead = ChatMessage(
+      role: .assistant,
+      content: "",
+      messageType: .toolUse,
+      toolName: "Read",
+      toolInputData: ToolInputData(parameters: ["file_path": "/tmp/screenshot.png"]),
+      toolUseID: "stale-read"
+    )
+    let answer = ChatMessage(role: .assistant, content: "A login screen.")
+    let secondUserMessage = ChatMessage(role: .user, content: "Now explain the layout")
+
+    let title = EaselToolCardPresentation.activeActivityTitle(
+      in: [firstUserMessage, staleImageRead, answer, secondUserMessage]
+    )
+
+    XCTAssertNil(title)
+  }
+
+  func testActiveActivityTitleStillReportsToolUseInCurrentTurn() {
+    let firstUserMessage = ChatMessage(role: .user, content: "What is in this screenshot?")
+    let staleImageRead = ChatMessage(
+      role: .assistant,
+      content: "",
+      messageType: .toolUse,
+      toolName: "Read",
+      toolInputData: ToolInputData(parameters: ["file_path": "/tmp/screenshot.png"]),
+      toolUseID: "stale-read"
+    )
+    let secondUserMessage = ChatMessage(role: .user, content: "Run the tests")
+    let currentToolUse = ChatMessage(
+      role: .assistant,
+      content: "",
+      messageType: .toolUse,
+      toolName: "Bash",
+      toolInputData: ToolInputData(parameters: ["command": "swift test"]),
+      toolUseID: "current"
+    )
+
+    let title = EaselToolCardPresentation.activeActivityTitle(
+      in: [firstUserMessage, staleImageRead, secondUserMessage, currentToolUse]
+    )
+
+    XCTAssertEqual(title, "Running tests")
+  }
+
   func testRelativeMessageTimeFormatting() {
     let formatter = RelativeMessageTimeFormatter()
     let now = Date(timeIntervalSince1970: 1_000)

@@ -280,6 +280,13 @@ struct EaselToolCardPresentation: Equatable {
     while index >= 0 {
       let message = messages[index]
 
+      // The walk stops at the user message that opened the current turn: a tool
+      // call from an earlier turn is finished business, even if its result never
+      // arrived. Without this, one unpaired call — an image read whose result
+      // went missing, say — keeps captioning the indicator on every later
+      // message, so the same file path reads as if it were being sent again.
+      if message.role == .user { return nil }
+
       if message.messageType == .toolUse {
         if pairedResult(after: index, in: messages, resultByToolUseID: toolResultsByID) == nil {
           return title(for: message, toolName: message.toolName ?? "Tool")
