@@ -25,6 +25,10 @@ public struct WorkspaceEditorView: View {
   @State private var selectedFile: WorkspaceFile?
   @State private var fileContent: String = ""
   @State private var editorContent: String = ""
+  /// Unsaved buffers for files that are not currently open, keyed by file id.
+  /// Switching files in the picker used to drop the visible buffer and reload
+  /// from disk, so anything the candidate had typed but not saved was lost.
+  @State private var drafts: [String: String] = [:]
   @State private var externalConflict: ExternalFileConflict?
   @State private var isSaving = false
   @State private var loadError: String?
@@ -127,7 +131,7 @@ public struct WorkspaceEditorView: View {
         Menu {
           ForEach(files) { file in
             Button(file.relativePath) {
-              select(file)
+              switchTo(file)
             }
           }
         } label: {
@@ -200,7 +204,7 @@ public struct WorkspaceEditorView: View {
 
       Button("Reload Agent Version") {
         guard let selectedFile else { return }
-        select(selectedFile)
+        select(selectedFile, discardingDraft: true)
       }
       .easelSecondaryButton()
       .controlSize(.small)
@@ -224,12 +228,18 @@ public struct WorkspaceEditorView: View {
         ProjectResourceTextPreview(
           fileName: selectedFile.fileName,
           text: fileContent,
+          draftText: editorContent == fileContent ? nil : editorContent,
           isSaving: isSaving,
           onSave: { newText in
             save(newText, to: selectedFile)
           },
           isRunning: isRunning,
-          onEditorTextChange: { editorContent = $0 },
+          onEditorTextChange: { [fileID = selectedFile.id] newText in
+            // A torn-down editor can still deliver an idle snapshot after the
+            // selection moved on; that text belongs to the previous file.
+            guard self.selectedFile?.id == fileID else { return }
+            editorContent = newText
+          },
           onRun: canRun(selectedFile) ? { latestText in
             saveAndRun(latestText, file: selectedFile)
           } : nil,
@@ -363,7 +373,7 @@ public struct WorkspaceEditorView: View {
     guard let diskContent = try? String(contentsOf: file.url, encoding: .utf8) else { return }
 
     if forceReload {
-      select(file)
+      select(file, discardingDraft: true)
       return
     }
 
@@ -377,7 +387,7 @@ public struct WorkspaceEditorView: View {
         externalConflict = nil
       }
     case .reloadFromDisk:
-      select(file)
+      select(file, discardingDraft: true)
     case .acknowledgeEditor:
       fileContent = diskContent
       editorContent = diskContent
@@ -409,10 +419,27 @@ public struct WorkspaceEditorView: View {
     files = found.sorted { $0.relativePath < $1.relativePath }
   }
 
-  private func select(_ file: WorkspaceFile) {
+  /// Moves the picker to another file, keeping the current buffer's unsaved
+  /// edits so coming back finds the work in progress rather than the disk copy.
+  private func switchTo(_ file: WorkspaceFile) {
+    guard file.id != selectedFile?.id else { return }
+    stashDraft()
+    select(file)
+  }
+
+  private func stashDraft() {
+    guard let selectedFile else { return }
+    drafts[selectedFile.id] = editorContent == fileContent ? nil : editorContent
+  }
+
+  /// Opens `file`, restoring any stashed draft for it unless the caller is
+  /// deliberately reloading the disk version. The draft is consumed here, so
+  /// `drafts` only ever holds buffers for files that are not open.
+  private func select(_ file: WorkspaceFile, discardingDraft: Bool = false) {
+    let draft = drafts.removeValue(forKey: file.id)
     do {
       fileContent = try String(contentsOf: file.url, encoding: .utf8)
-      editorContent = fileContent
+      editorContent = discardingDraft ? fileContent : (draft ?? fileContent)
       selectedFile = file
       externalConflict = nil
       loadError = nil
@@ -445,7 +472,7 @@ public struct WorkspaceEditorView: View {
       case .reloadFromDisk:
         // A clean but stale editor must adopt the provider's newer file. This
         // is especially important for Run, which used to overwrite disk first.
-        select(file)
+        select(file, discardingDraft: true)
         return true
       case .acknowledgeEditor:
         fileContent = diskContent
@@ -466,6 +493,7 @@ public struct WorkspaceEditorView: View {
       try text.write(to: file.url, atomically: true, encoding: .utf8)
       fileContent = text
       editorContent = text
+      drafts[file.id] = nil
       externalConflict = nil
       loadError = nil
       return true

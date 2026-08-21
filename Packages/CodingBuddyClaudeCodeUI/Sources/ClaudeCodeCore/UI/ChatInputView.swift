@@ -6,6 +6,7 @@
 //
 
 import AgentHarness
+import AppKit
 import SwiftUI
 import ClaudeCodeSDK
 import UniformTypeIdentifiers
@@ -494,6 +495,11 @@ extension ChatInputView {
         if key.modifiers.contains(.shift) {
           // Return .ignored to let TextEditor handle the newline insertion naturally
           return .ignored
+        } else if key.modifiers.contains(.command) {
+          // Command+Return is a second way to break the line. Unlike Shift, the
+          // text system has no binding for it, so the newline is inserted at
+          // the caret here instead of being passed through.
+          return insertNewlineAtCaret() ? .handled : .ignored
         } else {
           // Don't send message if already loading/streaming
           if viewModel.isLoading {
@@ -513,6 +519,26 @@ extension ChatInputView {
         return .ignored
       }
     }
+  }
+}
+
+// MARK: - Newline Insertion
+
+extension ChatInputView {
+
+  /// Inserts a line break at the caret of the focused text editor, keeping the
+  /// selection and undo stack the text system already maintains.
+  ///
+  /// SwiftUI's `TextEditor` exposes no caret, so this reaches for the AppKit
+  /// text view backing it; the caller falls back to the default handling when
+  /// the editor is not the first responder.
+  @discardableResult
+  fileprivate func insertNewlineAtCaret() -> Bool {
+    guard let textView = NSApp.keyWindow?.firstResponder as? NSTextView else {
+      return false
+    }
+    textView.insertNewlineIgnoringFieldEditor(nil)
+    return true
   }
 }
 

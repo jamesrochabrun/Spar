@@ -36,9 +36,16 @@ struct MainContentView: View {
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-  private let chatPanelWidth: CGFloat = 380
   private let sidebarWidth: CGFloat = 340
   private let windowControlLeadingReserve: CGFloat = 78
+
+  /// Chat stays narrow while the sidebar is open, since three columns have to
+  /// share the window. With the sidebar closed the freed width is worth more to
+  /// the transcript than to an already-wide canvas, so chat takes most of it
+  /// back rather than leaving the canvas to absorb all 340pt.
+  private var chatPanelWidth: CGFloat {
+    shouldShowSidebar ? 380 : 620
+  }
 
   var body: some View {
     HStack(spacing: 0) {

@@ -9,6 +9,9 @@ import SwiftUI
 struct ProjectResourceTextPreview: View {
   let fileName: String
   let text: String
+  /// An unsaved buffer to open with instead of `text`, so work in progress
+  /// survives switching away from this file and back.
+  let draftText: String?
   let isSaving: Bool
   let onSave: (String) -> Void
   let isRunning: Bool
@@ -23,6 +26,7 @@ struct ProjectResourceTextPreview: View {
   init(
     fileName: String,
     text: String,
+    draftText: String? = nil,
     isSaving: Bool,
     onSave: @escaping (String) -> Void,
     isRunning: Bool = false,
@@ -33,6 +37,7 @@ struct ProjectResourceTextPreview: View {
   ) {
     self.fileName = fileName
     self.text = text
+    self.draftText = draftText
     self.isSaving = isSaving
     self.onSave = onSave
     self.isRunning = isRunning
@@ -40,7 +45,9 @@ struct ProjectResourceTextPreview: View {
     self.onEditorTextChange = onEditorTextChange
     self.onRun = onRun
     self.onReview = onReview
-    self._editorState = State(initialValue: ProjectResourceTextEditorState(text: text))
+    self._editorState = State(
+      initialValue: ProjectResourceTextEditorState(text: text, draft: draftText)
+    )
   }
 
   @State private var editorState: ProjectResourceTextEditorState
@@ -51,9 +58,9 @@ struct ProjectResourceTextPreview: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(previewStyle.editorBackground)
     .onChange(of: fileName) { _, _ in
-      editorState.reset(with: text)
-      onUnsavedChangesChange(false)
-      onEditorTextChange(text)
+      editorState.reset(with: text, draft: draftText)
+      onUnsavedChangesChange(editorState.hasUnsavedChanges)
+      onEditorTextChange(editorState.editorText)
     }
     .onChange(of: text) { _, newText in
       editorState.synchronizeExternalText(newText)
