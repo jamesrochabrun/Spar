@@ -31,6 +31,42 @@ struct SourceCodeEditorViewTests {
   }
 
   @Test
+  func restoredDraftOpensAsUnsavedWorkOverTheDiskBaseline() {
+    let state = ProjectResourceTextEditorState(
+      text: "let value = 1\n",
+      draft: "let value = 2\n"
+    )
+
+    #expect(state.editorText == "let value = 2\n")
+    #expect(state.savedText == "let value = 1\n")
+    #expect(state.hasUnsavedChanges)
+  }
+
+  @Test
+  func draftMatchingDiskOpensClean() {
+    let state = ProjectResourceTextEditorState(
+      text: "let value = 1\n",
+      draft: "let value = 1\n"
+    )
+
+    #expect(state.editorText == "let value = 1\n")
+    #expect(!state.hasUnsavedChanges)
+  }
+
+  @Test
+  func resetWithDraftKeepsTheDraftAndFlagsItUnsaved() {
+    var state = ProjectResourceTextEditorState(text: "first file\n")
+    let documentID = state.documentID
+
+    state.reset(with: "second file on disk\n", draft: "second file, edited\n")
+
+    #expect(state.editorText == "second file, edited\n")
+    #expect(state.savedText == "second file on disk\n")
+    #expect(state.hasUnsavedChanges)
+    #expect(state.documentID != documentID)
+  }
+
+  @Test
   func externalContentReplacementCreatesANewEditorDocument() {
     var state = ProjectResourceTextEditorState(text: "let value = 1\n")
     let documentID = state.documentID
