@@ -40,6 +40,7 @@ public struct NewSessionSheet: View {
   @State private var isRulesImporterPresented = false
   @State private var usesImportedCodingProject = false
   @State private var codingProjectBrief = ""
+  @State private var sessionFocus = ""
   @State private var importedCodingProjectURL: URL?
   @State private var isCodingProjectImporterPresented = false
   @Environment(\.colorScheme) private var colorScheme
@@ -122,6 +123,8 @@ public struct NewSessionSheet: View {
               hintSection
             }
           }
+
+          focusSection
 
           rulesSection
 
@@ -291,6 +294,50 @@ public struct NewSessionSheet: View {
           .font(.callout)
           .foregroundStyle(EaselDesignSystem.Palette.danger)
       }
+    }
+  }
+
+  /// What the candidate wants this session to cover, for any mode — the
+  /// system-design "test me on this product" ask, a drill topic, a behavioral
+  /// theme. Goes into the session prompt as direction for question content;
+  /// grading stays on the mode's fixed rubric.
+  private var focusSection: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack {
+        sectionTitle("Session focus (optional)")
+        Spacer()
+        Text("\(sessionFocus.count)/\(SessionFocus.maximumCharacterCount)")
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.secondary)
+      }
+
+      TextField(focusPlaceholder, text: $sessionFocus, axis: .vertical)
+        .lineLimit(3...6)
+        .textFieldStyle(.roundedBorder)
+        .onChange(of: sessionFocus) { _, value in
+          let limited = SessionFocus.limitedInput(value)
+          if limited != value {
+            sessionFocus = limited
+          }
+        }
+
+      Text("Tell the interviewer what this session should cover — a domain, project, or topic you want to be tested on.")
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+
+  private var focusPlaceholder: String {
+    switch mode {
+    case .systemDesign:
+      return "Example: Design a ride-sharing dispatch system — focus on real-time location updates at scale."
+    case .behavioral:
+      return "Example: Ask about leading cross-team projects and handling conflicting priorities."
+    case .codingProject:
+      return "Example: Emphasize structured concurrency and testing while I build the project."
+    case .mockInterview, .practice, .drill:
+      return "Example: Test me on Swift concurrency — actors, task groups, and cancellation."
     }
   }
 
@@ -674,6 +721,7 @@ public struct NewSessionSheet: View {
       codingProjectBrief: mode == .codingProject
         ? CodingProjectBrief.normalized(codingProjectBrief)
         : nil,
+      sessionFocus: sessionFocus,
       // Order follows the library so the prompt reads the same way twice, and
       // ids for rules deleted since selection simply drop out.
       ruleSetIDs: ruleLibrary.ruleSets
