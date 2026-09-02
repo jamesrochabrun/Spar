@@ -18,12 +18,10 @@ let package = Package(
     ),
   ],
   dependencies: [
-    // 4.5.1 carries the realtime audio-graph fixes this package depends on.
-    // For local SwiftOpenAI iteration, temporarily swap in:
-    //   .package(path: "../../../../SwiftOpenAI")
+    // 4.6.0 carries the AudioPCMPlayer dead-IO play() crash fix (PR #197, commit 3db60ad).
     .package(
       url: "https://github.com/jamesrochabrun/SwiftOpenAI.git",
-      exact: "4.5.1"
+      exact: "4.6.0"
     )
   ],
   targets: [
